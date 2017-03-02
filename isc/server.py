@@ -1,6 +1,10 @@
 import pika
 import pickle
+import log
+import traceback
+import sys
 
+from gevent import sleep
 from gevent import monkey, spawn
 monkey.patch_all()
 
@@ -9,6 +13,7 @@ class Node(object):
     def __init__(self):
         self.services = {}
         self.listeners = {}
+        self.params = pika.ConnectionParameters('localhost')
 
     def on_message(self, channel, method, properties, body):
         spawn(self.validate_message, channel, method, properties, body)
@@ -34,21 +39,23 @@ class Node(object):
             fn = getattr(service, fn_name, None)
 
             if fn is None:
-                print('No method', fn_name)
+                log.warning('No method %s', fn_name)
                 raise Exception('Could not find method {}.'.format(fn_name))
 
             if getattr(fn, '__exposed__', None) is None:
-                print('Method', fn_name, 'is not exposed')
+                log.warning('Method %s is not exposed', fn_name)
                 raise Exception('You are not allowed to call unexposed method {}.'.format(fn_name))
         except Exception as e:
             return (str(e), None)
         else:
             try:
                 result = (None, fn(*args, **kwargs))
-                print('{}(*{}, **{})'.format(fn_name, args, kwargs))
+                log.debug('{}(*{}, **{})'.format(fn_name, args, kwargs))
                 return result
             except Exception as e:
-                print('Error in {}: {}'.format(fn_name, str(e)))
+                tb = sys.exc_info()[2]
+                frame = traceback.extract_tb(tb)[-1]
+                log.error('Error in RPC method "{}", file {}:{}:\n    {}\n{}: {}'.format(fn_name, frame.filename, frame.lineno, frame.line, e.__class__.__name__, str(e)))
                 return (str(e), None)
 
     def on_broadcast(self, channel, method, properties, body):
@@ -65,32 +72,42 @@ class Node(object):
         self.services[service.name] = service
 
     def run(self):
-        try:
-            conn = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-        except:
-            print('RabbitMQ not running?')
-            return
+        while True:
+            try:
+                conn = pika.BlockingConnection(self.params)
+                #     conn = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
+                # except Exception as e:
+                #     print(str(e))
+                #     print('RabbitMQ not running? Retrying connection in 1 second.')
+                #     sleep(1)
+                #     continue
 
-        channel = conn.channel()
-        for service in self.services.values():
-            queue = 'isc_service_{}'.format(service.name)
-            channel.queue_declare(queue=queue)
-            channel.basic_consume(self.on_message, queue=queue, no_ack=False)
+                channel = conn.channel()
+                for service in self.services.values():
+                    queue = 'isc_service_{}'.format(service.name)
+                    channel.queue_declare(queue=queue)
+                    channel.basic_consume(self.on_message, queue=queue, no_ack=False)
 
-            for attr in [getattr(service, attr, None) for attr in dir(service)]:
-                events = getattr(attr, '__on__', None)
-                if events:
-                    for event in events:
-                        if event not in self.listeners:
-                            self.listeners[event] = []
-                        self.listeners[event].append(attr)
+                    for attr in [getattr(service, attr, None) for attr in dir(service)]:
+                        events = getattr(attr, '__on__', None)
+                        if events:
+                            for event in events:
+                                if event not in self.listeners:
+                                    self.listeners[event] = []
+                                self.listeners[event].append(attr)
 
-        channel.exchange_declare(exchange='isc_fanout', type='fanout')
-        fanout_queue = channel.queue_declare(exclusive=True)
-        channel.queue_bind(exchange='isc_fanout', queue=fanout_queue.method.queue)
+                channel.exchange_declare(exchange='isc_fanout', type='fanout')
+                fanout_queue = channel.queue_declare(exclusive=True)
+                channel.queue_bind(exchange='isc_fanout', queue=fanout_queue.method.queue)
 
-        channel.basic_consume(self.on_broadcast, queue=fanout_queue.method.queue, no_ack=True)
-        channel.start_consuming()
+                channel.basic_consume(self.on_broadcast, queue=fanout_queue.method.queue, no_ack=True)
+                log.info('Ready')
+                channel.start_consuming()
+            except pika.exceptions.ConnectionClosed:
+                # TODO: Log this properly
+                log.error('Connection closed, retrying in 3 seconds')
+                sleep(3)
+                continue
 
 
 def expose(fn):

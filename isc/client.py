@@ -95,7 +95,7 @@ class Connection(object):
             exception, result = None
         future_result.happen((exception, result))
 
-    def call(self, service, method, args, kwargs):
+    def call(self, service, method, *args, **kwargs):
         """
         Serialize & publish method call request.
         """
@@ -127,23 +127,46 @@ class Connection(object):
         )
 
 
+class ServiceProxy(object):
+    def __init__(self, client, service_name):
+        self.client = client
+        self.service_name = service_name
+
+    def __getattr__(self, attr):
+        return MethodProxy(self.client, self.service_name, attr)
+
+
+class MethodProxy(object):
+    def __init__(self, client, service_name, method_name):
+        self.client = client
+        self.service_name = service_name
+        self.method_name = method_name
+
+    def __call__(self, *args, **kwargs):
+        return self.client.invoke(self.service_name, self.method_name, *args, **kwargs)
+
+
 class Client(object):
     """
     Provides simple interface to the Connection.
     """
-    def __init__(self, hostname='127.0.0.1'):
+    def __init__(self, hostname='127.0.0.1', timeout=5):
         self.connection = Connection(hostname)
         self.connection.connect()
+        self.timeout = timeout
         spawn(self.connection.start_consuming)
 
-    def invoke(self, service, method, args=None, kwargs=None, timeout=5):
+    def set_timeout(self, timeout):
+        self.timeout = timeout
+
+    def invoke(self, service, method, *args, **kwargs):
         """
         Call a remote method.
         """
 
-        future_result = self.connection.call(service, method, args or [], kwargs or {})
+        future_result = self.connection.call(service, method, *args, **kwargs)
 
-        data = future_result.wait(timeout=timeout)
+        data = future_result.wait(self.timeout)
 
         if data:
             exception, result = data
@@ -160,3 +183,6 @@ class Client(object):
         Publish a notification.
         """
         self.connection.notify(event, data)
+
+    def __getattr__(self, attr):
+        return ServiceProxy(self, attr)

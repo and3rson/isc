@@ -8,8 +8,8 @@ class TestService(object):
     name = 'test'
 
     @expose
-    def foo(self):
-        return 'bar'
+    def add(self, a, b):
+        return a + b
 
     @expose
     def raise_error(self):

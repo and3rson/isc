@@ -6,7 +6,15 @@ client = Client()
 
 client.notify('boom', dict(foo='bar'))
 
-assert client.invoke('test', 'foo') == 'bar'
+assert client.test.add(2, 3) == 5
+assert client.invoke('test', 'add', 2, 3) == 5
+
+try:
+    client.test.add(2, '3')
+except RemoteException:
+    pass
+else:
+    assert False
 
 try:
     client.invoke('test', 'raise_error')
@@ -31,7 +39,8 @@ else:
 
 
 try:
-    client.invoke('test', 'slow_method', timeout=1)
+    client.set_timeout(1)
+    client.invoke('test', 'slow_method')
 except TimeoutException:
     pass
 else:

@@ -3,6 +3,7 @@
 from isc.client import Client
 from threading import Thread, Event
 from time import time
+from random import random
 
 
 COUNT = 100
@@ -17,7 +18,7 @@ class Process(Thread):
     def run(self):
         self.proceed_evt.wait()
         start = time()
-        client.invoke('test', 'foo')
+        client.test.add(random(), random())
         self.timediff = int((time() - start) * 1000)
 
 
