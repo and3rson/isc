@@ -1,6 +1,7 @@
 #!/usr/bin/env python3.6
 
 from isc.server import Node, expose, on
+from time import sleep
 
 
 class TestService(object):
@@ -20,6 +21,10 @@ class TestService(object):
     @on('boom')
     def do_stuff(self, arg):
         print('Got stuff:', arg)
+
+    @expose
+    def slow_method(self):
+        sleep(3)
 
 
 service = TestService()

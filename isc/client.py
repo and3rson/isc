@@ -7,7 +7,19 @@ from gevent.event import Event
 monkey.patch_all()
 
 
-class RemoteException(Exception):
+class IPCException(Exception):
+    pass
+
+
+class RemoteException(IPCException):
+    pass
+
+
+class LocalException(IPCException):
+    pass
+
+
+class TimeoutException(LocalException):
     pass
 
 
@@ -77,11 +89,13 @@ class Connection(object):
             return
         try:
             exception, result = pickle.loads(body)
+            if exception:
+                exception = RemoteException(exception)
         except:
             exception, result = None
         future_result.happen((exception, result))
 
-    def call(self, service, method, *args, **kwargs):
+    def call(self, service, method, args, kwargs):
         """
         Serialize & publish method call request.
         """
@@ -122,17 +136,22 @@ class Client(object):
         self.connection.connect()
         spawn(self.connection.start_consuming)
 
-    def invoke(self, service, method, *args, **kwargs):
+    def invoke(self, service, method, args=None, kwargs=None, timeout=5):
         """
         Call a remote method.
         """
 
-        future_result = self.connection.call(service, method, *args, **kwargs)
+        future_result = self.connection.call(service, method, args or [], kwargs or {})
 
-        exception, result = future_result.wait()
+        data = future_result.wait(timeout=timeout)
+
+        if data:
+            exception, result = data
+        else:
+            exception, result = TimeoutException('Method {}.{} timed out.'.format(service, method)), None
 
         if exception:
-            raise RemoteException(exception)
+            raise exception
         else:
             return result
 

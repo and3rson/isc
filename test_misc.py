@@ -1,6 +1,6 @@
 #!/usr/bin/env python3.6
 
-from isc.client import Client, RemoteException
+from isc.client import Client, RemoteException, TimeoutException
 
 client = Client()
 
@@ -25,6 +25,14 @@ else:
 try:
     client.invoke('test', 'unexisting_method')
 except RemoteException:
+    pass
+else:
+    assert False
+
+
+try:
+    client.invoke('test', 'slow_method', timeout=1)
+except TimeoutException:
     pass
 else:
     assert False
