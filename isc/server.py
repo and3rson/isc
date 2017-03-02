@@ -12,16 +12,104 @@ monkey.patch_all()
 
 
 class Node(object):
+    """
+    Registers services & listens to AMQP for RPC calls & notifications.
+    """
+
     def __init__(self):
         self.services = {}
         self.listeners = {}
         self._is_ready = Event()
         self.params = pika.ConnectionParameters('localhost')
+        self._is_running = False
 
-    def on_message(self, channel, method, properties, body):
-        spawn(self.validate_message, channel, method, properties, body)
+    def run(self):
+        """
+        Starts provider node.
+        Blocks until `stop` is called.
+        """
+        self._is_running = True
+        while self._is_running:
+            try:
+                self.conn = pika.BlockingConnection(self.params)
+                self.channel = self.conn.channel()
 
-    def validate_message(self, channel, method, properties, body):
+                self._create_service_queues(self.channel, self.services)
+                self._register_listeners(self.services)
+                self._create_fanout_exchange(self.channel)
+
+                log.info('Ready')
+                self._is_ready.set()
+                self.channel.start_consuming()
+                self._is_running = False
+            except pika.exceptions.ConnectionClosed:  # pragma: no cover
+                self._is_ready.clear()
+                log.error('Connection closed, retrying in 3 seconds')
+                sleep(3)
+                continue
+        log.info('Node terminated')
+
+    def register_service(self, service):
+        """
+        Registers a service to make it callable & notifiable via RPC.
+        """
+        if service.name in self.services:
+            raise Exception('Service {} is already registered.'.format(service.name))
+        self.services[service.name] = service
+
+    def wait_for_ready(self):
+        """
+        Blocks until the connection to AMQP is established.
+        """
+        self._is_ready.wait()
+
+    def stop(self):
+        """
+        Stops provider node.
+        """
+        self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
+
+    def _create_service_queues(self, channel, services):
+        """
+        Creates necessary AMQP queues, one per service.
+        """
+        for service in services.values():
+            queue = 'isc_service_{}'.format(service.name)
+            channel.queue_declare(queue=queue)
+            channel.basic_consume(self._on_message, queue=queue, no_ack=False)
+
+    def _register_listeners(self, services):
+        """
+        Populates listeners dictionary to speed up notification handling.
+        """
+        for service in services.values():
+            for attr in [getattr(service, attr, None) for attr in dir(service)]:
+                for event in getattr(attr, '__on__', []):
+                    if event not in self.listeners:
+                        self.listeners[event] = []
+                    self.listeners[event].append(attr)
+
+    def _create_fanout_exchange(self, channel):
+        """
+        Creates a fanout queue to accept notifications.
+        """
+        channel.exchange_declare(exchange='isc_fanout', type='fanout')
+        fanout_queue = channel.queue_declare(exclusive=True)
+        channel.queue_bind(exchange='isc_fanout', queue=fanout_queue.method.queue)
+
+        channel.basic_consume(self._on_broadcast, queue=fanout_queue.method.queue, no_ack=True)
+
+    def _on_message(self, channel, method, properties, body):
+        """
+        Called when a message is received on one of the queues.
+        """
+        spawn(self._validate_message, channel, method, properties, body)
+
+    def _validate_message(self, channel, method, properties, body):
+        """
+        Checks and acknowledges a received message if it can be handled
+        by any registered service.
+        """
         service_name = method.routing_key[12:]
 
         if service_name not in self.services:  # pragma: no cover
@@ -30,24 +118,20 @@ class Node(object):
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
         service = self.services[service_name]
-        result = self.call_service(service, body)
+        result = self._call_service(service, body)
 
         channel.basic_publish(exchange='', routing_key=properties.reply_to, properties=pika.BasicProperties(
             correlation_id=properties.correlation_id
         ), body=pickle.dumps(result))
 
-    def call_service(self, service, body):
+    def _call_service(self, service, body):
+        """
+        Calls method and returns the tuple with `Exception` instance
+        # or `None` and result or `None`.
+        """
         try:
             fn_name, args, kwargs = pickle.loads(body)
-            fn = getattr(service, fn_name, None)
-
-            if fn is None:
-                log.warning('No method %s', fn_name)
-                raise Exception('Could not find method {}.'.format(fn_name))
-
-            if getattr(fn, '__exposed__', None) is None:
-                log.warning('Method %s is not exposed', fn_name)
-                raise Exception('You are not allowed to call unexposed method {}.'.format(fn_name))
+            fn = self._get_method(service, fn_name)
         except Exception as e:
             return (str(e), None)
         else:
@@ -65,7 +149,28 @@ class Node(object):
                 log.error('Error in RPC method "{}", file {}:{}:\n    {}\n{}: {}'.format(fn_name, filename, lineno, line, e.__class__.__name__, str(e)))
                 return (str(e), None)
 
-    def on_broadcast(self, channel, method, properties, body):
+    def _get_method(self, service, fn_name):
+        """
+        Checks if requested method exists and can be called.
+        """
+        fn = getattr(service, fn_name, None)
+
+        if fn is None:
+            log.warning('No method %s', fn_name)
+            raise Exception('Could not find method {}.'.format(fn_name))
+
+        if getattr(fn, '__exposed__', None) is None:
+            log.warning('Method %s is not exposed', fn_name)
+            raise Exception('You are not allowed to call unexposed method {}.'.format(fn_name))
+
+        return fn
+
+    def _on_broadcast(self, channel, method, properties, body):
+        """
+        Called when a notification is received.
+        Does not acknowledge notifications because they're
+        delivered via `fanout` exchange.
+        """
         # TODO: Handle decoding errors
         event, data = pickle.loads(body)
 
@@ -73,66 +178,19 @@ class Node(object):
         for fn in listeners:
             spawn(fn, data)
 
-    def register_service(self, service):
-        if service.name in self.services:
-            raise Exception('Service {} is already registered.'.format(service.name))
-        self.services[service.name] = service
-
-    def run(self):
-        while True:
-            try:
-                conn = pika.BlockingConnection(self.params)
-                self.conn = conn
-                #     conn = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
-                # except Exception as e:
-                #     print(str(e))
-                #     print('RabbitMQ not running? Retrying connection in 1 second.')
-                #     sleep(1)
-                #     continue
-
-                channel = conn.channel()
-                for service in self.services.values():
-                    queue = 'isc_service_{}'.format(service.name)
-                    channel.queue_declare(queue=queue)
-                    channel.basic_consume(self.on_message, queue=queue, no_ack=False)
-
-                    for attr in [getattr(service, attr, None) for attr in dir(service)]:
-                        events = getattr(attr, '__on__', None)
-                        if events:
-                            for event in events:
-                                if event not in self.listeners:
-                                    self.listeners[event] = []
-                                self.listeners[event].append(attr)
-
-                channel.exchange_declare(exchange='isc_fanout', type='fanout')
-                fanout_queue = channel.queue_declare(exclusive=True)
-                channel.queue_bind(exchange='isc_fanout', queue=fanout_queue.method.queue)
-
-                channel.basic_consume(self.on_broadcast, queue=fanout_queue.method.queue, no_ack=True)
-                log.info('Ready')
-                self.channel = channel
-                self._is_ready.set()
-                channel.start_consuming()
-                break
-            except pika.exceptions.ConnectionClosed:  # pragma: no cover
-                self._is_ready.clear()
-                log.error('Connection closed, retrying in 3 seconds')
-                sleep(3)
-                continue
-
-    def wait_for_ready(self):
-        self._is_ready.wait()
-
-    def stop(self):
-        self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
-
 
 def expose(fn):
+    """
+    Marks a method as "exposed", i. e. available to be called via RPC.
+    """
     fn.__exposed__ = True
     return fn
 
 
 def on(event):
+    """
+    Marks a method as "event handler", i. e. reacting to notifications.
+    """
     def wrapper(fn):
         if getattr(fn, '__on__', None) is None:
             fn.__on__ = set()
