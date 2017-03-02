@@ -3,7 +3,7 @@ from time import sleep
 from gevent import spawn
 from gevent.event import Event
 from .server import Node, expose, on
-from .client import Client, RemoteException, TimeoutException
+from .client import Client, RemoteException, TimeoutException, FutureResult
 
 
 class ExampleService(object):
@@ -52,6 +52,13 @@ class GenericTest(TestCase):
     def test_method_success(self):
         self.assertEqual(self.client.example.add(2, 3), 5)
         self.assertEqual(self.client.invoke('example', 'add', 2, 3), 5)
+
+    def test_method_async(self):
+        future_result = self.client.example.add.call_async(2, 3)
+        self.assertIsInstance(future_result, FutureResult)
+        future_result.wait()
+        self.assertEqual(future_result.exception, None)
+        self.assertEqual(future_result.value, 5)
 
     def test_method_exceptions(self):
         self.assertRaises(RemoteException, self.client.example.add)

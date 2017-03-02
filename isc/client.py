@@ -27,30 +27,38 @@ class TimeoutException(LocalException):
 
 class FutureResult(object):
     """
-    Encapsulates future result. Provides interface to wait for future data.
+    Encapsulates future result.
+    Provides interface to block until future data is ready.
+    Thread-safe.
     """
-    def __init__(self):
+    def __init__(self, cannonical_name):
         self.event = Event()
-        self.result = None
+        self.exception = None
+        self.value = None
+        self.cannonical_name = cannonical_name
 
     def wait(self, timeout=5):
         """
         Blocks until data is ready.
         """
-        self.event.wait(timeout=float(timeout))
-        return self.result
+        if not self.event.wait(timeout=float(timeout)):
+            self.exception = TimeoutException()
+            return False
+        return True
 
-    def happen(self, result):
+    def happen(self, exception, value):
         """
         Fulfills the result and sets "ready" event.
         """
-        self.result = result
+        self.exception = exception
+        self.value = value
         self.event.set()
 
 
 class Connection(object):
     """
     Represents a single low-level connection to the ISC messaging broker.
+    Thread-safe.
     """
     def __init__(self, host):
         self.host = host
@@ -100,7 +108,7 @@ class Connection(object):
                 exception = RemoteException(exception)
         except Exception as e:  # pragma: no cover
             exception, result = LocalException(str(e)), None
-        future_result.happen((exception, result))
+        future_result.happen(exception, result)
 
     def call(self, service, method, *args, **kwargs):
         """
@@ -108,7 +116,7 @@ class Connection(object):
         """
         corr_id = str(uuid.uuid4())
 
-        future_result = FutureResult()
+        future_result = FutureResult('{}.{}'.format(service, method))
         self.future_results[corr_id] = future_result
 
         self.channel.basic_publish(
@@ -135,6 +143,9 @@ class Connection(object):
 
 
 class ServiceProxy(object):
+    """
+    Convenience wrapper for service.
+    """
     def __init__(self, client, service_name):
         self.client = client
         self.service_name = service_name
@@ -144,6 +155,9 @@ class ServiceProxy(object):
 
 
 class MethodProxy(object):
+    """
+    Convenience wrapper for method.
+    """
     def __init__(self, client, service_name, method_name):
         self.client = client
         self.service_name = service_name
@@ -152,10 +166,14 @@ class MethodProxy(object):
     def __call__(self, *args, **kwargs):
         return self.client.invoke(self.service_name, self.method_name, *args, **kwargs)
 
+    def call_async(self, *args, **kwargs):
+        return self.client.invoke_async(self.service_name, self.method_name, *args, **kwargs)
+
 
 class Client(object):
     """
     Provides simple interface to the Connection.
+    Thread-safe.
     """
     def __init__(self, hostname='127.0.0.1', timeout=5):
         self.connection = Connection(hostname)
@@ -175,22 +193,25 @@ class Client(object):
 
     def invoke(self, service, method, *args, **kwargs):
         """
-        Call a remote method.
+        Call a remote method and wait for a result.
+        Blocks until a result is ready.
         """
 
-        future_result = self.connection.call(service, method, *args, **kwargs)
+        future_result = self.invoke_async(service, method, *args, **kwargs)
 
-        data = future_result.wait(self.timeout)
+        future_result.wait(self.timeout)
 
-        if data:
-            exception, result = data
+        if future_result.exception:
+            raise future_result.exception
         else:
-            exception, result = TimeoutException('Method {}.{} timed out.'.format(service, method)), None
+            return future_result.value
 
-        if exception:
-            raise exception
-        else:
-            return result
+    def invoke_async(self, service, method, *args, **kwargs):
+        """
+        Calls a remote method and returns a `FutureResult`.
+        Does not block.
+        """
+        return self.connection.call(service, method, *args, **kwargs)
 
     def notify(self, event, data):
         """
@@ -199,4 +220,9 @@ class Client(object):
         self.connection.notify(event, data)
 
     def __getattr__(self, attr):
+        """
+        Convenience method.
+        Returns ServiceProxy to make it look like we're actually calling
+        local methods from local objects.
+        """
         return ServiceProxy(self, attr)
