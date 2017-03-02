@@ -3,6 +3,7 @@
 from isc.client import Client, RemoteException, TimeoutException
 
 client = Client()
+client.connect()
 
 client.notify('boom', dict(foo='bar'))
 

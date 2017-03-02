@@ -1,11 +1,12 @@
+from gevent import monkey, spawn
+monkey.patch_all()
+
 import pika
 import pickle
 import uuid
-import log
+from threading import Event
 
-from gevent import monkey, spawn
-from gevent.event import Event
-monkey.patch_all()
+from isc import log
 
 
 class IPCException(Exception):
@@ -36,7 +37,7 @@ class FutureResult(object):
         """
         Blocks until data is ready.
         """
-        self.event.wait(timeout=timeout)
+        self.event.wait(timeout=float(timeout))
         return self.result
 
     def happen(self, result):
@@ -63,7 +64,7 @@ class Connection(object):
             self.conn = pika.BlockingConnection(pika.ConnectionParameters(self.host))
         except:
             log.error('RabbitMQ not running?')
-            return
+            return False
 
         self.channel = self.conn.channel()
         # self.channel.queue_declare(queue='test')
@@ -72,6 +73,8 @@ class Connection(object):
 
         self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
 
+        return True
+
     def start_consuming(self):
         """
         Start consuming messages.
@@ -79,12 +82,15 @@ class Connection(object):
         """
         self.channel.start_consuming()
 
+    def stop_consuming(self):
+        self.channel.stop_consuming()
+
     def on_response(self, channel, method, properties, body):
         """
         Called when a message is consumed.
         """
         future_result = self.future_results.get(properties.correlation_id, None)
-        if not future_result:
+        if not future_result:  # pragma: no cover
             # TODO: Should not happen!
             log.error('FIXME: This should not happen.')
             return
@@ -92,8 +98,8 @@ class Connection(object):
             exception, result = pickle.loads(body)
             if exception:
                 exception = RemoteException(exception)
-        except:
-            exception, result = None
+        except Exception as e:  # pragma: no cover
+            exception, result = LocalException(str(e)), None
         future_result.happen((exception, result))
 
     def call(self, service, method, *args, **kwargs):
@@ -153,9 +159,16 @@ class Client(object):
     """
     def __init__(self, hostname='127.0.0.1', timeout=5):
         self.connection = Connection(hostname)
-        self.connection.connect()
         self.timeout = timeout
+
+    def connect(self):
+        if not self.connection.connect():
+            return False
+
         spawn(self.connection.start_consuming)
+
+    def stop(self):
+        self.connection.stop_consuming()
 
     def set_timeout(self, timeout):
         self.timeout = timeout

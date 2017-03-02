@@ -1,8 +1,10 @@
 import pika
 import pickle
-import log
 import traceback
 import sys
+from threading import Event
+
+from isc import log
 
 from gevent import sleep
 from gevent import monkey, spawn
@@ -13,6 +15,7 @@ class Node(object):
     def __init__(self):
         self.services = {}
         self.listeners = {}
+        self._is_ready = Event()
         self.params = pika.ConnectionParameters('localhost')
 
     def on_message(self, channel, method, properties, body):
@@ -21,7 +24,7 @@ class Node(object):
     def validate_message(self, channel, method, properties, body):
         service_name = method.routing_key[12:]
 
-        if service_name not in self.services:
+        if service_name not in self.services:  # pragma: no cover
             return
 
         channel.basic_ack(delivery_tag=method.delivery_tag)
@@ -75,6 +78,7 @@ class Node(object):
         while True:
             try:
                 conn = pika.BlockingConnection(self.params)
+                self.conn = conn
                 #     conn = pika.BlockingConnection(pika.ConnectionParameters('localhost'))
                 # except Exception as e:
                 #     print(str(e))
@@ -102,12 +106,21 @@ class Node(object):
 
                 channel.basic_consume(self.on_broadcast, queue=fanout_queue.method.queue, no_ack=True)
                 log.info('Ready')
+                self.channel = channel
+                self._is_ready.set()
                 channel.start_consuming()
-            except pika.exceptions.ConnectionClosed:
-                # TODO: Log this properly
+                break
+            except pika.exceptions.ConnectionClosed:  # pragma: no cover
+                self._is_ready.clear()
                 log.error('Connection closed, retrying in 3 seconds')
                 sleep(3)
                 continue
+
+    def wait_for_ready(self):
+        self._is_ready.wait()
+
+    def stop(self):
+        self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
 
 
 def expose(fn):

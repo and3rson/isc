@@ -23,6 +23,7 @@ class Process(Thread):
 
 
 client = Client()
+client.connect()
 
 
 print('Creating', COUNT, 'requesters')
