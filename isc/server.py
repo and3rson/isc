@@ -22,6 +22,11 @@ class Node(object):
         self._is_ready = Event()
         self.params = pika.ConnectionParameters('localhost')
         self._is_running = False
+        self.hooks = {
+            'pre_call': set(),
+            'post_success': set(),
+            'post_error': set()
+        }
 
     def run(self):
         """
@@ -56,6 +61,12 @@ class Node(object):
         if service.name in self.services:
             raise Exception('Service {} is already registered.'.format(service.name))
         self.services[service.name] = service
+
+    def add_hook(self, name):
+        def decorator(fn):
+            self.hooks[name] |= set([fn])
+            return fn
+        return decorator
 
     def wait_for_ready(self):
         """
@@ -138,8 +149,10 @@ class Node(object):
             return (str(e), None)
         else:
             try:
+                self._fire_hook('pre_call', fn_name, args, kwargs)
                 result = (None, fn(*args, **kwargs))
                 log.debug('{}(*{}, **{})'.format(fn_name, args, kwargs))
+                self._fire_hook('post_success', fn_name, args, kwargs, result)
                 return result
             except Exception as e:
                 tb = sys.exc_info()[2]
@@ -149,6 +162,7 @@ class Node(object):
                 else:  # pragma: no cover
                     filename, lineno, line = frame.filename, frame.lineno, frame.line
                 log.error('Error in RPC method "{}", file {}:{}:\n    {}\n{}: {}'.format(fn_name, filename, lineno, line, e.__class__.__name__, str(e)))
+                self._fire_hook('post_error', fn_name, args, kwargs, e)
                 return (str(e), None)
 
     def _get_method(self, service, fn_name):
@@ -179,6 +193,10 @@ class Node(object):
         listeners = self.listeners.get(event, [])
         for fn in listeners:
             spawn(fn, data)
+
+    def _fire_hook(self, name, *args, **kwargs):
+        for hook in self.hooks[name]:
+            hook(*args, **kwargs)
 
 
 def expose(fn):

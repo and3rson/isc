@@ -93,6 +93,37 @@ class GenericTest(TestCase):
         client = Client('unexisting.hostname.it.should.not.exist.and.if.it.does.then.this.test.will.fail')
         self.assertFalse(client.connect())
 
+    def test_success_hooks(self):
+        self.pre_call_called = False
+        self.post_success_called = False
+        self.post_error_called = False
+
+        @self.node.add_hook('pre_call')
+        def pre_call(*args):
+            self.pre_call_called = True
+
+        @self.node.add_hook('post_success')
+        def post_success(*args):
+            self.post_success_called = True
+
+        @self.node.add_hook('post_error')
+        def post_error(*args):
+            self.post_error_called = True
+
+        self.assertEqual(self.client.example.add(2, 3), 5)
+        self.assertTrue(self.pre_call_called)
+        self.assertTrue(self.post_success_called)
+        self.assertFalse(self.post_error_called)
+
+        self.pre_call_called = False
+        self.post_success_called = False
+        self.post_error_called = False
+
+        self.assertRaises(RemoteException, self.client.example.add, (2, '3'))
+        self.assertTrue(self.pre_call_called)
+        self.assertFalse(self.post_success_called)
+        self.assertTrue(self.post_error_called)
+
     # def test_slow_method(self):
     #     # TODO: Does not pass.
     #     self.client.set_timeout(1)
