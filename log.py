@@ -13,7 +13,7 @@ logger.level = LEVEL
 # logger.addHandler(handler)
 # handler.setFormatter(ColoredFormatter())
 
-coloredlogs.install(logger=logger)
+coloredlogs.install(level=LEVEL, logger=logger)
 
 debug = logger.debug
 info = logger.info
