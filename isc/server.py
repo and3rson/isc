@@ -58,7 +58,11 @@ class Node(object):
             except Exception as e:
                 tb = sys.exc_info()[2]
                 frame = traceback.extract_tb(tb)[-1]
-                log.error('Error in RPC method "{}", file {}:{}:\n    {}\n{}: {}'.format(fn_name, frame.filename, frame.lineno, frame.line, e.__class__.__name__, str(e)))
+                if isinstance(frame, tuple):  # pragma: no cover
+                    filename, lineno, _, line = frame
+                else:  # pragma: no cover
+                    filename, lineno, line = frame.filename, frame.lineno, frame.line
+                log.error('Error in RPC method "{}", file {}:{}:\n    {}\n{}: {}'.format(fn_name, filename, lineno, line, e.__class__.__name__, str(e)))
                 return (str(e), None)
 
     def on_broadcast(self, channel, method, properties, body):

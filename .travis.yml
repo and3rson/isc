@@ -4,5 +4,8 @@ python:
   - "3.6"
 services:
   - rabbitmq
-install: "pip install -r requirements.txt"
+install:
+  - pip install -r requirements/build.txt
 script: make test
+after_success:
+  - coveralls

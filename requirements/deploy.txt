@@ -1,6 +1,5 @@
 appdirs==1.4.2
 coloredlogs==5.2
-coverage==4.3.4
 gevent==1.2.1
 greenlet==0.4.12
 humanfriendly==2.4
@@ -9,5 +8,4 @@ pbr==2.0.0
 pika==0.10.0
 py==1.4.32
 pyparsing==2.1.10
-pytest==3.0.6
 six==1.10.0
