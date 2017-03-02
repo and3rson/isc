@@ -6,7 +6,7 @@ from time import time
 from random import random
 
 
-COUNT = 100
+COUNT = 1000
 
 
 class Process(Thread):
