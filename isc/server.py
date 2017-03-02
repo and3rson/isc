@@ -73,9 +73,11 @@ class Node(object):
         """
         Creates necessary AMQP queues, one per service.
         """
+        channel.exchange_declare(exchange='isc')
         for service in services.values():
             queue = 'isc_service_{}'.format(service.name)
             channel.queue_declare(queue=queue)
+            channel.queue_bind(queue, 'isc')
             channel.basic_consume(self._on_message, queue=queue, no_ack=False)
 
     def _register_listeners(self, services):
@@ -120,7 +122,7 @@ class Node(object):
         service = self.services[service_name]
         result = self._call_service(service, body)
 
-        channel.basic_publish(exchange='', routing_key=properties.reply_to, properties=pika.BasicProperties(
+        channel.basic_publish(exchange='isc', routing_key=properties.reply_to, properties=pika.BasicProperties(
             correlation_id=properties.correlation_id
         ), body=pickle.dumps(result))
 

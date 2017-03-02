@@ -6,6 +6,7 @@ from time import time
 from random import random
 
 
+ITERATIONS = 10
 COUNT = 1000
 
 
@@ -14,17 +15,20 @@ class Process(Thread):
         super(Process, self).__init__()
         self.proceed_evt = Event()
         self.client = client
+        self.timediff = 0
 
     def run(self):
         self.proceed_evt.wait()
-        start = time()
-        client.test.add(random(), random())
-        self.timediff = int((time() - start) * 1000)
+        for i in range(0, ITERATIONS):
+            start = time()
+            client.test.add(random(), random())
+            self.timediff += int((time() - start) * 1000)
 
 
 client = Client()
 client.connect()
 
+client.test.start_tracking()
 
 print('Creating', COUNT, 'requesters')
 
@@ -38,7 +42,7 @@ print('Starting workers')
 for thread in threads:
     thread.start()
 
-print('Starting attack...')
+print('Starting attack ({} requests per worker)...'.format(ITERATIONS))
 
 for thread in threads:
     thread.proceed_evt.set()
@@ -53,7 +57,12 @@ timediff = int((time() - start) * 1000)
 print('Done in {}ms'.format(timediff))
 
 print('avg: {}ms, min: {}ms, max: {}ms'.format(
-    sum([thread.timediff for thread in threads]) / len(threads),
-    min([thread.timediff for thread in threads]),
-    max([thread.timediff for thread in threads])
+    sum([thread.timediff / ITERATIONS for thread in threads]) / len(threads),
+    min([thread.timediff / ITERATIONS for thread in threads]),
+    max([thread.timediff / ITERATIONS for thread in threads])
 ))
+
+print('Final server summary:')
+summary = client.test.get_summary()
+for line in summary:
+    print(line)

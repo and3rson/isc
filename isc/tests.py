@@ -10,7 +10,7 @@ class ExampleService(object):
     name = 'example'
 
     def __init__(self):
-        # Just for the tests, don't do this - services *must* be stateless
+        # Just for the tests, don't do this - services *must* be stateless!
         self.stuff_done_event = Event()
 
     @expose

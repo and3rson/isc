@@ -78,6 +78,7 @@ class Connection(object):
         # self.channel.queue_declare(queue='test')
 
         self.callback_queue = self.channel.queue_declare(exclusive=True).method.queue
+        self.channel.queue_bind(self.callback_queue, exchange='isc')
 
         self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
 
@@ -120,7 +121,7 @@ class Connection(object):
         self.future_results[corr_id] = future_result
 
         self.channel.basic_publish(
-            exchange='', routing_key='isc_service_{}'.format(service), body=pickle.dumps((method, args, kwargs)),
+            exchange='isc', routing_key='isc_service_{}'.format(service), body=pickle.dumps((method, args, kwargs)),
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue, correlation_id=corr_id
             )

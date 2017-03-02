@@ -2,10 +2,16 @@
 
 from isc.server import Node, expose, on
 from time import sleep
+from pympler import tracker
+import sys
+import trace
 
 
 class TestService(object):
     name = 'test'
+
+    def __init__(self):
+        self.tracker = None
 
     @expose
     def add(self, a, b):
@@ -26,6 +32,14 @@ class TestService(object):
     def slow_method(self):
         sleep(3)
 
+    @expose
+    def start_tracking(self):
+        self.tracker = tracker.SummaryTracker()
+
+    @expose
+    def get_summary(self):
+        return list(self.tracker.format_diff())
+
 
 service = TestService()
 node = Node()
@@ -33,3 +47,4 @@ node.register_service(service)
 
 if __name__ == '__main__':
     node.run()
+    # trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix]).runfunc(node.run)
