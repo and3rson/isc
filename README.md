@@ -4,7 +4,7 @@ Inter-service communication layer for Python.
 
 Uses `AMQP` as broker and `gevent` for multiprocessing.
 
-[![Coverage Status](https://coveralls.io/repos/github/and3rson/isc/badge.svg)](https://coveralls.io/github/and3rson/isc) [![Build Status](https://travis-ci.org/and3rson/isc.svg?branch=master)](https://travis-ci.org/and3rson/isc)
+[![Coverage Status](https://coveralls.io/repos/github/and3rson/isc/badge.svg)](https://coveralls.io/github/and3rson/isc) [![Build Status](https://travis-ci.org/and3rson/isc.svg)](https://travis-ci.org/and3rson/isc)
 
 # Dependencies
 
