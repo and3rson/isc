@@ -1,6 +1,7 @@
 import pika
 import pickle
 import uuid
+import log
 
 from gevent import monkey, spawn
 from gevent.event import Event
@@ -61,7 +62,7 @@ class Connection(object):
         try:
             self.conn = pika.BlockingConnection(pika.ConnectionParameters(self.host))
         except:
-            print('RabbitMQ not running?')
+            log.error('RabbitMQ not running?')
             return
 
         self.channel = self.conn.channel()
@@ -85,7 +86,7 @@ class Connection(object):
         future_result = self.future_results.get(properties.correlation_id, None)
         if not future_result:
             # TODO: Should not happen!
-            print('FIXME: This should not happen.')
+            log.error('FIXME: This should not happen.')
             return
         try:
             exception, result = pickle.loads(body)

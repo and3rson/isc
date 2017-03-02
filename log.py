@@ -7,7 +7,7 @@ FORMAT = '%(asctime)-15s : %(levelname)-8s : %(message)s'
 logging.basicConfig(format=FORMAT)
 # logging.addLevelName(logging.DEBUG, 'DBG')
 # logging.addLevelName(logging.DEBUG, 'ERR')
-logger = logging.getLogger('root')
+logger = logging.getLogger('ipc')
 logger.level = LEVEL
 # handler = logging.StreamHandler()
 # logger.addHandler(handler)
