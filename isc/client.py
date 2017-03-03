@@ -1,10 +1,10 @@
-from gevent import monkey, spawn
-monkey.patch_all()
+#from gevent import monkey, spawn
+#monkey.patch_all()
 
 import pika
 import pickle
 import uuid
-from threading import Event
+from threading import Thread, Event
 
 from isc import log
 
@@ -89,10 +89,12 @@ class Connection(object):
         Start consuming messages.
         This function is blocking.
         """
+        print('started')
         self.channel.start_consuming()
+        print('stopped')
 
     def stop_consuming(self):
-        self.channel.stop_consuming()
+        self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
 
     def on_response(self, channel, method, properties, body):
         """
@@ -179,15 +181,18 @@ class Client(object):
     def __init__(self, hostname='127.0.0.1', timeout=5):
         self.connection = Connection(hostname)
         self.timeout = timeout
+        self._thread = None
 
     def connect(self):
         if not self.connection.connect():
             return False
 
-        spawn(self.connection.start_consuming)
+        self._thread = Thread(target=self.connection.start_consuming)
+        self._thread.start()
 
     def stop(self):
         self.connection.stop_consuming()
+        self._thread.join()
 
     def set_timeout(self, timeout):
         self.timeout = timeout

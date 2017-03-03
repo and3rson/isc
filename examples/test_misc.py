@@ -46,3 +46,5 @@ except TimeoutException:
     pass
 else:
     assert False
+
+client.stop()

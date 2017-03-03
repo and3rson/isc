@@ -6,7 +6,7 @@ from time import time
 from random import random
 
 
-ITERATIONS = 10
+ITERATIONS = 1
 COUNT = 1000
 
 
@@ -66,3 +66,5 @@ print('Final server summary:')
 summary = client.test.get_summary()
 for line in summary:
     print(line)
+
+client.stop()
