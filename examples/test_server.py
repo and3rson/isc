@@ -1,10 +1,8 @@
 #!/usr/bin/env python3.6
 
-from isc.server import Node, expose, on
+from isc.server import Node, expose, on, local_timer
 from time import sleep
 from pympler import tracker
-import sys
-import trace
 
 
 class TestService(object):
@@ -39,6 +37,10 @@ class TestService(object):
     @expose
     def get_summary(self):
         return list(self.tracker.format_diff())
+
+    @local_timer(timeout=3)
+    def print_stats(self):
+        print('Stats: foobar', a)
 
 
 service = TestService()

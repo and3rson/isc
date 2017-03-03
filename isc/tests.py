@@ -2,7 +2,8 @@ from unittest import TestCase
 from time import sleep
 from gevent import spawn
 from gevent.event import Event
-from .server import Node, expose, on
+from time import time
+from .server import Node, expose, on, local_timer
 from .client import Client, RemoteException, TimeoutException, FutureResult
 
 
@@ -12,6 +13,7 @@ class ExampleService(object):
     def __init__(self):
         # Just for the tests, don't do this - services *must* be stateless!
         self.stuff_done_event = Event()
+        self.collect_stats_done = Event()
 
     @expose
     def add(self, a, b):
@@ -32,6 +34,11 @@ class ExampleService(object):
     @expose
     def slow_method(self):  # pragma: no cover
         sleep(3)
+
+    @local_timer(timeout=1)
+    def collect_stats(self):
+        self.collect_stats_done.set()
+
 
 
 class GenericTest(TestCase):
@@ -123,6 +130,24 @@ class GenericTest(TestCase):
         self.assertTrue(self.pre_call_called)
         self.assertFalse(self.post_success_called)
         self.assertTrue(self.post_error_called)
+
+    def test_local_timer(self):
+        # Measure time taken by timer to execute.
+
+        self.service.collect_stats_done.wait(timeout=5)
+
+        timediffs = []
+        samples = 5
+
+        for i in range(samples):
+            self.service.collect_stats_done.clear()
+            start = time()
+            self.service.collect_stats_done.wait()
+            timediffs.append(time() - start)
+
+        timediff_avg = sum(timediffs) / samples
+
+        self.assertAlmostEqual(timediff_avg, 1, 1)
 
     # def test_slow_method(self):
     #     # TODO: Does not pass.
