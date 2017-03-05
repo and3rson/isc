@@ -13,7 +13,7 @@ Uses `AMQP` as broker and `gevent` for multiprocessing.
 
 # Installation
 
-```
+```bash
 pip install isclib
 ```
 
@@ -89,7 +89,7 @@ client.private_method()
 # Communication between services
 
 ## App 1: User service
-```
+```python
 class UserService(object):
     name = 'users'
     
@@ -108,7 +108,7 @@ class UserService(object):
 ```
 
 ## App 2: Message service
-```
+```python
 from isc.client import Client
 
 client = Client()
@@ -128,7 +128,7 @@ class MessageService(object):
         client.notify('new_message', user['username'], message)
 ```        
 ## App 3: Use case
-```
+```python
 from isc.client import Client
 
 client = Client()
