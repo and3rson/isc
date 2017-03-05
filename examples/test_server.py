@@ -40,7 +40,7 @@ class TestService(object):
 
     @local_timer(timeout=3)
     def print_stats(self):
-        print('Stats: foobar', a)
+        print('Stats: foobar')
 
 
 service = TestService()

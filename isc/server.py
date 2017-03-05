@@ -64,6 +64,10 @@ class Node(object):
         self.services[service.name] = service
 
     def add_hook(self, name):
+        """
+        Registers a hook to be executed when requested event occurs.
+        Possible names are `pre_call`, `post_success` or `post_error`.
+        """
         def decorator(fn):
             self.hooks[name] |= set([fn])
             return fn
@@ -82,13 +86,19 @@ class Node(object):
         self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
 
     def _run_scheduled_with_local_timer(self, fn, timeout):
+        """
+        Runs the method and reschedules it to be executed again.
+        """
         fn_name = fn.__name__
-        exception, _ = self._call_service_method(fn_name, fn, (), {})
+        exception, _ = self._call_service_method(fn, (), {})
         if not exception:
             log.debug('Scheduled function %s completed successfully.', fn_name)
         self._schedule_with_local_timer(fn, timeout)
 
     def _schedule_with_local_timer(self, fn, timeout):
+        """
+        Schedules a job to be executed after requested timeout.
+        """
         spawn_later(timeout, self._run_scheduled_with_local_timer, fn, timeout)
 
     def _create_service_queues(self, channel, services):
@@ -124,6 +134,9 @@ class Node(object):
         channel.basic_consume(self._on_broadcast, queue=fanout_queue.method.queue, no_ack=True)
 
     def _schedule_methods(self, services):
+        """
+        Spawns timers for periodic tasks.
+        """
         for service in services.values():
             for attr in [getattr(service, attr, None) for attr in dir(service)]:
                 for timeout in getattr(attr, '__timeouts__', []):
@@ -147,28 +160,42 @@ class Node(object):
 
         channel.basic_ack(delivery_tag=method.delivery_tag)
 
-        service = self.services[service_name]
-        result = self._call_service(service, body)
+        # service = self.services[service_name]
+        try:
+            fn_name, args, kwargs = self._decode_message(body)
+        except Exception as e:
+            log.error(str(e))
+        else:
+            result = self._call_service_method((service_name, fn_name), args, kwargs)
 
-        channel.basic_publish(exchange='isc', routing_key=properties.reply_to, properties=pika.BasicProperties(
-            correlation_id=properties.correlation_id
-        ), body=pickle.dumps(result))
+            channel.basic_publish(exchange='isc', routing_key=properties.reply_to, properties=pika.BasicProperties(
+                correlation_id=properties.correlation_id
+            ), body=pickle.dumps(result))
 
-    def _call_service(self, service, body):
+    def _decode_message(self, body):
+        """
+        Decodes message body.
+        Raises `Exception` on error.
+        """
+        try:
+            return pickle.loads(body)
+        except Exception as e:
+            raise Exception('Failed to decode message: {}'.format(str(e)))
+
+    def _call_service_method(self, info, args, kwargs):
         """
         Calls method and returns the tuple with `Exception` instance
-        # or `None` and result or `None`.
+        or `None` and result or `None`.
+        `info` can be tuple containing service name & method name
+        or the actual callable method.
         """
         try:
-            fn_name, args, kwargs = pickle.loads(body)
-            fn = self._get_method(service, fn_name)
-        except Exception as e:
-            return (str(e), None)
-        else:
-            return self._call_service_method(fn_name, fn, args, kwargs)
-
-    def _call_service_method(self, fn_name, fn, args, kwargs):
-        try:
+            if isinstance(info, tuple):
+                service_name, fn_name = info
+                fn = self._get_method(service_name, fn_name)
+            else:
+                fn_name = info.__name__
+                fn = info
             self._fire_hook('pre_call', fn_name, args, kwargs)
             result = (None, fn(*args, **kwargs))
             log.debug('{}(*{}, **{})'.format(fn_name, args, kwargs))
@@ -180,6 +207,9 @@ class Node(object):
             return (str(e), None)
 
     def _log_method_error(self, fn_name, e):
+        """
+        Logs error with appropriate stack frame extracted.
+        """
         tb = sys.exc_info()[2]
         frame = traceback.extract_tb(tb)[-1]
         if isinstance(frame, tuple):  # pragma: no cover
@@ -188,10 +218,12 @@ class Node(object):
             filename, lineno, line = frame.filename, frame.lineno, frame.line
         log.error('Error in RPC method "{}", file {}:{}:\n    {}\n{}: {}'.format(fn_name, filename, lineno, line, e.__class__.__name__, str(e)))
 
-    def _get_method(self, service, fn_name):
+    def _get_method(self, service_name, fn_name):
         """
         Checks if requested method exists and can be called.
+        Raises `Exception` on error.
         """
+        service = self.services[service_name]
         fn = getattr(service, fn_name, None)
 
         if fn is None:
@@ -210,14 +242,19 @@ class Node(object):
         Does not acknowledge notifications because they're
         delivered via `fanout` exchange.
         """
-        # TODO: Handle decoding errors
-        event, data = pickle.loads(body)
-
-        listeners = self.listeners.get(event, [])
-        for fn in listeners:
-            spawn(fn, data)
+        try:
+            event, data = self._decode_message(body)
+        except Exception as e:
+            log.error(str(e))
+        else:
+            listeners = self.listeners.get(event, [])
+            for fn in listeners:
+                spawn(fn, data)
 
     def _fire_hook(self, name, *args, **kwargs):
+        """
+        Fires methods registered for a requested hook.
+        """
         for hook in self.hooks[name]:
             hook(*args, **kwargs)
 
@@ -243,6 +280,9 @@ def on(event):
 
 
 def local_timer(timeout):
+    """
+    Marks a method as "periodic job" to execute it every `timeout` seconds.
+    """
     def wrapper(fn):
         if getattr(fn, '__timeouts__', None) is None:
             fn.__timeouts__ = set()

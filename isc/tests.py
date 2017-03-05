@@ -3,7 +3,7 @@ from time import sleep
 from gevent import spawn
 from gevent.event import Event
 from time import time
-from .server import Node, expose, on, local_timer
+from .server import Node, expose, on, local_timer, pickle, log
 from .client import Client, RemoteException, TimeoutException, FutureResult
 
 
@@ -38,7 +38,6 @@ class ExampleService(object):
     @local_timer(timeout=1)
     def collect_stats(self):
         self.collect_stats_done.set()
-
 
 
 class GenericTest(TestCase):
@@ -131,7 +130,7 @@ class GenericTest(TestCase):
         self.assertFalse(self.post_success_called)
         self.assertTrue(self.post_error_called)
 
-    def test_local_timer(self):
+    def test_local_timer_timings(self):
         # Measure time taken by timer to execute.
 
         self.service.collect_stats_done.wait(timeout=5)
@@ -148,6 +147,38 @@ class GenericTest(TestCase):
         timediff_avg = sum(timediffs) / samples
 
         self.assertAlmostEqual(timediff_avg, 1, 1)
+
+    def test_bad_message_payload(self):
+        dumps_ = pickle.dumps
+        error_ = log.error
+        e = Event()
+        log.error = lambda *args: e.set() if args[0].startswith('Failed to decode message') else None
+        pickle.dumps = lambda *args: 'crap'
+
+        self.client.example.add.call_async(2, 3)
+        self.assertTrue(e.wait(1), 'log.error was not called')
+
+        pickle.dumps = dumps_
+        log.error = error_
+
+        self.assertEquals(self.client.example.add(2, 3), 5, 'Should operate normally after error')
+
+    def test_bad_notify_payload(self):
+        dumps_ = pickle.dumps
+        error_ = log.error
+        e = Event()
+        log.error = lambda *args: e.set() if args[0].startswith('Failed to decode message') else None
+        pickle.dumps = lambda *args: 'crap'
+
+        self.client.notify('boom', dict(place='some_place'))
+
+        self.assertTrue(e.wait(1), 'log.error was not called')
+
+        pickle.dumps = dumps_
+        log.error = error_
+
+        self.client.notify('boom', dict(place='some_place'))
+        self.assertEqual(self.service.stuff_done_event.wait(3), True, 'Should operate normally after error')
 
     # def test_slow_method(self):
     #     # TODO: Does not pass.

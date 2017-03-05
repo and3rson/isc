@@ -89,9 +89,7 @@ class Connection(object):
         Start consuming messages.
         This function is blocking.
         """
-        print('started')
         self.channel.start_consuming()
-        print('stopped')
 
     def stop_consuming(self):
         self.conn.add_timeout(0, lambda: self.channel.stop_consuming())

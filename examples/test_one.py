@@ -6,3 +6,5 @@ client = Client()
 client.connect()
 
 assert client.test.add(2, 3) == 5
+
+client.stop()
