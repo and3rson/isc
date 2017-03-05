@@ -1,7 +1,7 @@
 from unittest import TestCase
-try:
+try:  # pragma: no cover
     from unittest import mock
-except ImportError:
+except ImportError:  # pragma: no cover
     import mock
 from time import sleep
 from gevent import spawn
