@@ -17,7 +17,7 @@ Uses `AMQP` as broker and `gevent` for multiprocessing.
 pip install isclib
 ```
 
-# Example
+# All-in-one example
 
 ## Server
 
@@ -26,29 +26,34 @@ pip install isclib
 ```python
 #!/usr/bin/env python3.6
 
-from isc.server import Node, expose, on
+from isc.server import Node, expose, on, local_timer
 
 
-class TestService(object):
-    name = 'test'
+class ExampleService(object):
+    name = 'example'
 
     @expose
     def foo(self):
         return 'bar'
 
     @expose
-    def raise_error(self):
-        raise Exception('some error')
+    def dangerous_operation(self):
+        raise Exception('BOOM')
 
     def private_method(self):
-        return 'Cannot call me!'
+        print('Cannot call me!')
 
     @on('boom')
     def do_stuff(self, data):
         print(data['place'], 'exploded')
 
+    @local_timer(timeout=5)
+    def print_statistics(self):
+        # Will be called every 5 seconds.
+        print('Staying alive!')
 
-service = TestService()
+
+service = ExampleService()
 node = Node()
 node.register_service(service)
 
@@ -69,17 +74,73 @@ from isc.client import Client, RemoteException
 client = Client()
 
 # Call single method
-assert client.invoke('test', 'foo') == 'bar'
+assert client.example.foo()  # returns 'bar'
 
-# Handler errors
-try:
-    client.invoke('test', 'raise_error')
-except RemoteException as e:
-    # Thrown if any exception happens on the remote end.
-    assert str(e) == 'some error'
+# Raises RemoteException
+client.example.dangerous_operation()
 
 # Send a broadcast
 client.notify('boom', dict(place='old_building'))
+
+# Raises RemoteException
+client.private_method()
+```
+
+# Communication between services
+
+## App 1: User service
+```
+class UserService(object):
+    name = 'users'
+    
+    @expose
+    def get_user(self, id):
+        # Let's use some ORM to retrieve the user from DB
+        user = User.objects.filter(id=id).first()
+        if user:
+            # User not found!
+            return {'username': user.username}
+        return None
+        
+    @on('new_message')
+    def on_new_message(self, username, message):
+        print('New message for user {}: {}'.format(username, message))
+```
+
+## App 2: Message service
+```
+from isc.client import Client
+
+client = Client()
+
+class MessageService(object):
+    name = 'messages'
+    
+    @expose
+    def send_message(self, body, receipt):
+        user = client.users.get_user(receipt)
+        if not user:
+            # User not found!
+            raise Exception('Cannot send message: user not found')
+        Message.objects.create(receipt=receipt, message=body)
+        
+        # Broadcast to all instances
+        client.notify('new_message', user['username'], message)
+```        
+## App 3: Use case
+```
+from isc.client import Client
+
+client = Client()
+
+# ...
+
+try:
+    client.messages.send_message('Hello!', some_user_id)
+except RemoteException as e:
+    print('Failed to send message, error was: {}'.format(str(e)))
+else:
+    print('Message send!')
 ```
 
 # Contribution
