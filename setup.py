@@ -6,7 +6,7 @@ from setuptools import setup
 
 setup(
     name='isclib',
-    version='0.7',
+    version='0.8',,
     description='ISC: Inter-service communication layer for Python.',
     author="Andrew Dunai",
     author_email='andrew@dun.ai',

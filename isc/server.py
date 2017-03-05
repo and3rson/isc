@@ -37,6 +37,7 @@ class Node(object):
         while self._is_running:
             try:
                 self.conn = pika.BlockingConnection(self.params)
+                self.conn.process_data_events = self.fix_pika_timeout(self.conn.process_data_events)
                 self.channel = self.conn.channel()
 
                 self._create_service_queues(self.channel, self.services)
@@ -84,6 +85,14 @@ class Node(object):
         Stops provider node.
         """
         self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
+
+    def fix_pika_timeout(self, process_data_events):
+        """
+        Fixes pika timeout (default is 5, we want it to be 1 for faster shutdown)
+        """
+        def process_data_events_new(time_limit=0):
+            return process_data_events(time_limit=1)
+        return process_data_events_new
 
     def _run_scheduled_with_local_timer(self, fn, timeout):
         """

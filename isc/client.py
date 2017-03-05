@@ -70,6 +70,7 @@ class Connection(object):
         """
         try:
             self.conn = pika.BlockingConnection(pika.ConnectionParameters(self.host))
+            self.conn.process_data_events = self.fix_pika_timeout(self.conn.process_data_events)
         except:
             log.error('RabbitMQ not running?')
             return False
@@ -83,6 +84,11 @@ class Connection(object):
         self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
 
         return True
+
+    def fix_pika_timeout(self, process_data_events):
+        def process_data_events_new(time_limit=0):
+            return process_data_events(time_limit=1)
+        return process_data_events_new
 
     def start_consuming(self):
         """

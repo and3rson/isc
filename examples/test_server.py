@@ -48,5 +48,8 @@ node = Node()
 node.register_service(service)
 
 if __name__ == '__main__':
-    node.run()
+    try:
+        node.run()
+    except KeyboardInterrupt:
+        node.stop()
     # trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix]).runfunc(node.run)

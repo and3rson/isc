@@ -1,4 +1,4 @@
-from unittest import TestCase
+from unittest import TestCase, mock
 from time import sleep
 from gevent import spawn
 from gevent.event import Event
@@ -33,7 +33,8 @@ class ExampleService(object):
 
     @expose
     def slow_method(self):  # pragma: no cover
-        sleep(3)
+        sleep(2)
+        return 42
 
     @local_timer(timeout=1)
     def collect_stats(self):
@@ -149,38 +150,28 @@ class GenericTest(TestCase):
         self.assertAlmostEqual(timediff_avg, 1, 1)
 
     def test_bad_message_payload(self):
-        dumps_ = pickle.dumps
-        error_ = log.error
         e = Event()
-        log.error = lambda *args: e.set() if args[0].startswith('Failed to decode message') else None
-        pickle.dumps = lambda *args: 'crap'
-
-        self.client.example.add.call_async(2, 3)
-        self.assertTrue(e.wait(1), 'log.error was not called')
-
-        pickle.dumps = dumps_
-        log.error = error_
+        with mock.patch.object(pickle, 'loads', side_effect=Exception('boom')):
+            with mock.patch.object(log, 'error', side_effect=lambda *args: e.set()) as error:
+                self.client.example.add.call_async(2, 3)
+                self.assertTrue(e.wait(1), 'log.error was not called')
+                self.assertTrue(error.call_args[0][0].startswith('Failed to decode message'))
 
         self.assertEquals(self.client.example.add(2, 3), 5, 'Should operate normally after error')
 
     def test_bad_notify_payload(self):
-        dumps_ = pickle.dumps
-        error_ = log.error
         e = Event()
-        log.error = lambda *args: e.set() if args[0].startswith('Failed to decode message') else None
-        pickle.dumps = lambda *args: 'crap'
-
-        self.client.notify('boom', dict(place='some_place'))
-
-        self.assertTrue(e.wait(1), 'log.error was not called')
-
-        pickle.dumps = dumps_
-        log.error = error_
+        with mock.patch.object(pickle, 'loads', side_effect=Exception('boom')):
+            with mock.patch.object(log, 'error', side_effect=lambda *args: e.set()) as error:
+                self.client.notify('boom', dict(place='some_place'))
+                self.assertTrue(e.wait(1), 'log.error was not called')
+                self.assertTrue(error.call_args[0][0].startswith('Failed to decode message'))
 
         self.client.notify('boom', dict(place='some_place'))
         self.assertEqual(self.service.stuff_done_event.wait(3), True, 'Should operate normally after error')
 
-    # def test_slow_method(self):
-    #     # TODO: Does not pass.
-    #     self.client.set_timeout(1)
-    #     self.assertRaises(TimeoutException, self.client.example.slow_method)
+    def test_slow_method(self):
+        self.client.set_timeout(1)
+        self.assertRaises(TimeoutException, self.client.example.slow_method)
+        self.client.set_timeout(3)
+        self.assertEqual(self.client.example.slow_method(), 42)
