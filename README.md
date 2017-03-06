@@ -4,12 +4,16 @@ Inter-service communication layer for Python.
 
 Uses `AMQP` as broker and `gevent` for multiprocessing.
 
-[![Coverage Status](https://coveralls.io/repos/github/and3rson/isc/badge.svg)](https://coveralls.io/github/and3rson/isc) [![Build Status](https://travis-ci.org/and3rson/isc.svg)](https://travis-ci.org/and3rson/isc)
+[![Coverage Status](https://coveralls.io/repos/github/and3rson/isc/badge.svg)](https://coveralls.io/github/and3rson/isc) [![Build Status](https://travis-ci.org/and3rson/isc.svg)](https://travis-ci.org/and3rson/isc) [![Documentation Status](https://readthedocs.org/projects/isc/badge/?version=latest)](http://isc.readthedocs.io/en/latest/?badge=latest)
 
 # Dependencies
 
 - `gevent`
 - `pika`
+
+# Documentation
+
+The docs are available via [ReadTheDocs](http://isc.readthedocs.io/en/latest/).
 
 # Installation
 
@@ -84,63 +88,6 @@ client.notify('boom', dict(place='old_building'))
 
 # Raises RemoteException
 client.private_method()
-```
-
-# Communication between services
-
-## App 1: User service
-```python
-class UserService(object):
-    name = 'users'
-    
-    @expose
-    def get_user(self, id):
-        # Let's use some ORM to retrieve the user from DB
-        user = User.objects.filter(id=id).first()
-        if user:
-            # User not found!
-            return {'username': user.username}
-        return None
-        
-    @on('new_message')
-    def on_new_message(self, username, message):
-        print('New message for user {}: {}'.format(username, message))
-```
-
-## App 2: Message service
-```python
-from isc.client import Client
-
-client = Client()
-
-class MessageService(object):
-    name = 'messages'
-    
-    @expose
-    def send_message(self, body, receipt):
-        user = client.users.get_user(receipt)
-        if not user:
-            # User not found!
-            raise Exception('Cannot send message: user not found')
-        Message.objects.create(receipt=receipt, message=body)
-        
-        # Broadcast to all instances
-        client.notify('new_message', user['username'], message)
-```        
-## App 3: Use case
-```python
-from isc.client import Client
-
-client = Client()
-
-# ...
-
-try:
-    client.messages.send_message('Hello!', some_user_id)
-except RemoteException as e:
-    print('Failed to send message, error was: {}'.format(str(e)))
-else:
-    print('Message send!')
 ```
 
 # Contribution
