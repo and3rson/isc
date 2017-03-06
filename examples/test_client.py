@@ -21,14 +21,14 @@ class Process(Thread):
         self.proceed_evt.wait()
         for i in range(0, ITERATIONS):
             start = time()
-            client.test.add(random(), random())
+            client.example.add(random(), random())
             self.timediff += int((time() - start) * 1000)
 
 
 client = Client()
 client.connect()
 
-client.test.start_tracking()
+client.example.start_tracking()
 
 print('Creating', COUNT, 'requesters')
 
@@ -63,7 +63,7 @@ print('avg: {}ms, min: {}ms, max: {}ms'.format(
 ))
 
 print('Final server summary:')
-summary = client.test.get_summary()
+summary = client.example.get_summary()
 for line in summary:
     print(line)
 

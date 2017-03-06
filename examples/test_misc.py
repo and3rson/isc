@@ -7,32 +7,32 @@ client.connect()
 
 client.notify('boom', dict(foo='bar'))
 
-assert client.test.add(2, 3) == 5
-assert client.invoke('test', 'add', 2, 3) == 5
+assert client.example.add(2, 3) == 5
+assert client.invoke('example', 'add', 2, 3) == 5
 
 try:
-    client.test.add(2, '3')
+    client.example.add(2, '3')
 except RemoteException:
     pass
 else:
     assert False
 
 try:
-    client.invoke('test', 'raise_error')
+    client.example.raise_error()
 except RemoteException:
     pass
 else:
     assert False
 
 try:
-    client.invoke('test', 'private_method')
+    client.example.private_method()
 except RemoteException:
     pass
 else:
     assert False
 
 try:
-    client.invoke('test', 'unexisting_method')
+    client.example.unexisting_method()
 except RemoteException:
     pass
 else:
@@ -41,7 +41,7 @@ else:
 
 try:
     client.set_timeout(1)
-    client.invoke('test', 'slow_method')
+    client.example.slow_method()
 except TimeoutException:
     pass
 else:

@@ -5,8 +5,8 @@ from time import sleep
 from pympler import tracker
 
 
-class TestService(object):
-    name = 'test'
+class ExampleService(object):
+    name = 'example'
 
     def __init__(self):
         self.tracker = None
@@ -43,7 +43,7 @@ class TestService(object):
         print('Stats: foobar')
 
 
-service = TestService()
+service = ExampleService()
 node = Node()
 node.register_service(service)
 
@@ -52,4 +52,3 @@ if __name__ == '__main__':
         node.run()
     except KeyboardInterrupt:
         node.stop()
-    # trace.Trace(ignoredirs=[sys.prefix, sys.exec_prefix]).runfunc(node.run)
