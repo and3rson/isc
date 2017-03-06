@@ -44,7 +44,7 @@ class ExampleService(object):
 
 
 service = ExampleService()
-node = Node()
+node = Node(exchange='isctest')
 node.register_service(service)
 
 if __name__ == '__main__':

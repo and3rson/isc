@@ -25,7 +25,7 @@ class Process(Thread):
             self.timediff += int((time() - start) * 1000)
 
 
-client = Client()
+client = Client(exchange='isctest')
 client.connect()
 
 client.example.start_tracking()

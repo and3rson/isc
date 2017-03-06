@@ -47,12 +47,12 @@ class ExampleService(object):
 
 class GenericTest(TestCase):
     def setUp(self):
-        self.node = Node()
+        self.node = Node(exchange='isc-unittest')
         self.service = ExampleService()
         self.node.register_service(self.service)
         self.node_greenlet = spawn(self.node.run)
         self.node.wait_for_ready()
-        self.client = Client()
+        self.client = Client(exchange='isc-unittest')
         self.client.connect()
 
     def tearDown(self):

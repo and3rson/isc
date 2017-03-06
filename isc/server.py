@@ -16,11 +16,14 @@ class Node(object):
     Registers services & listens to AMQP for RPC calls & notifications.
     """
 
-    def __init__(self):
+    def __init__(self, hostname='127.0.0.1', exchange='isc'):
+        self.exchange = exchange
+        self._infix = '_service_'
+        self.queue_name_offset = len(exchange) + len(self._infix)
         self.services = {}
         self.listeners = {}
         self._is_ready = Event()
-        self.params = pika.ConnectionParameters('localhost')
+        self.params = pika.ConnectionParameters(hostname)
         self._is_running = False
         self.hooks = {
             'pre_call': set(),
@@ -114,11 +117,11 @@ class Node(object):
         """
         Creates necessary AMQP queues, one per service.
         """
-        channel.exchange_declare(exchange='isc')
+        channel.exchange_declare(exchange=self.exchange)
         for service in services.values():
-            queue = 'isc_service_{}'.format(service.name)
+            queue = '{}_service_{}'.format(self.exchange, service.name)
             channel.queue_declare(queue=queue)
-            channel.queue_bind(queue, 'isc')
+            channel.queue_bind(queue, self.exchange)
             channel.basic_consume(self._on_message, queue=queue, no_ack=False)
 
     def _register_listeners(self, services):
@@ -136,9 +139,9 @@ class Node(object):
         """
         Creates a fanout queue to accept notifications.
         """
-        channel.exchange_declare(exchange='isc_fanout', type='fanout')
+        channel.exchange_declare(exchange='{}_fanout'.format(self.exchange), type='fanout')
         fanout_queue = channel.queue_declare(exclusive=True)
-        channel.queue_bind(exchange='isc_fanout', queue=fanout_queue.method.queue)
+        channel.queue_bind(exchange='{}_fanout'.format(self.exchange), queue=fanout_queue.method.queue)
 
         channel.basic_consume(self._on_broadcast, queue=fanout_queue.method.queue, no_ack=True)
 
@@ -162,7 +165,8 @@ class Node(object):
         Checks and acknowledges a received message if it can be handled
         by any registered service.
         """
-        service_name = method.routing_key[12:]
+
+        service_name = method.routing_key[self.queue_name_offset:]
 
         if service_name not in self.services:  # pragma: no cover
             return
@@ -177,7 +181,7 @@ class Node(object):
         else:
             result = self._call_service_method((service_name, fn_name), args, kwargs)
 
-            channel.basic_publish(exchange='isc', routing_key=properties.reply_to, properties=pika.BasicProperties(
+            channel.basic_publish(exchange=self.exchange, routing_key=properties.reply_to, properties=pika.BasicProperties(
                 correlation_id=properties.correlation_id
             ), body=pickle.dumps(result))
 

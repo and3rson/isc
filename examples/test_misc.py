@@ -2,7 +2,7 @@
 
 from isc.client import Client, RemoteException, TimeoutException
 
-client = Client()
+client = Client(exchange='isctest')
 client.connect()
 
 client.notify('boom', dict(foo='bar'))

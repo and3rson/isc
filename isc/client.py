@@ -60,8 +60,9 @@ class Connection(object):
     Represents a single low-level connection to the ISC messaging broker.
     Thread-safe.
     """
-    def __init__(self, host):
+    def __init__(self, host, exchange):
         self.host = host
+        self.exchange = exchange
         self.future_results = {}
 
     def connect(self):
@@ -79,7 +80,7 @@ class Connection(object):
         # self.channel.queue_declare(queue='test')
 
         self.callback_queue = self.channel.queue_declare(exclusive=True).method.queue
-        self.channel.queue_bind(self.callback_queue, exchange='isc')
+        self.channel.queue_bind(self.callback_queue, exchange=self.exchange)
 
         self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
 
@@ -127,7 +128,7 @@ class Connection(object):
         self.future_results[corr_id] = future_result
 
         self.channel.basic_publish(
-            exchange='isc', routing_key='isc_service_{}'.format(service), body=pickle.dumps((method, args, kwargs)),
+            exchange=self.exchange, routing_key='{}_service_{}'.format(self.exchange, service), body=pickle.dumps((method, args, kwargs)),
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue, correlation_id=corr_id
             )
@@ -142,7 +143,7 @@ class Connection(object):
         corr_id = str(uuid.uuid4())
 
         self.channel.basic_publish(
-            exchange='isc_fanout', routing_key='', body=pickle.dumps((event, data)),
+            exchange='{}_fanout'.format(self.exchange), routing_key='', body=pickle.dumps((event, data)),
             properties=pika.BasicProperties(
                 correlation_id=corr_id
             )
@@ -182,8 +183,8 @@ class Client(object):
     Provides simple interface to the Connection.
     Thread-safe.
     """
-    def __init__(self, hostname='127.0.0.1', timeout=5):
-        self.connection = Connection(hostname)
+    def __init__(self, hostname='127.0.0.1', timeout=5, exchange='isc'):
+        self.connection = Connection(hostname, exchange)
         self.timeout = timeout
         self._thread = None
 
