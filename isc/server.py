@@ -1,10 +1,9 @@
 import pika
-import pickle
 import traceback
 import sys
 from threading import Event
 
-from isc import log
+from isc import codecs, log
 
 from gevent import sleep
 from gevent import monkey, spawn, spawn_later
@@ -25,6 +24,9 @@ class Node(object):
         self._is_ready = Event()
         self.params = pika.ConnectionParameters(hostname)
         self._is_running = False
+        self.codecs = {}
+        self.register_codec(codecs.PickleCodec)
+        self.register_codec(codecs.JSONCodec)
         self.hooks = {
             'pre_call': set(),
             'post_success': set(),
@@ -66,6 +68,9 @@ class Node(object):
         if service.name in self.services:
             raise Exception('Service {} is already registered.'.format(service.name))
         self.services[service.name] = service
+
+    def register_codec(self, codec_class):
+        self.codecs[codec_class.content_type] = codec_class()
 
     def add_hook(self, name):
         """
@@ -175,7 +180,7 @@ class Node(object):
 
         # service = self.services[service_name]
         try:
-            fn_name, args, kwargs = self._decode_message(body)
+            requested_codec, (fn_name, args, kwargs) = self._decode_message(properties, body)
         except Exception as e:
             log.error(str(e))
         else:
@@ -183,15 +188,22 @@ class Node(object):
 
             channel.basic_publish(exchange=self.exchange, routing_key=properties.reply_to, properties=pika.BasicProperties(
                 correlation_id=properties.correlation_id
-            ), body=pickle.dumps(result))
+            ), body=requested_codec.encode(result))
 
-    def _decode_message(self, body):
+    def _decode_message(self, properties, body):
         """
         Decodes message body.
         Raises `Exception` on error.
         """
+        content_type = properties.content_type
+
         try:
-            return pickle.loads(body)
+            codec = self.codecs[content_type]
+        except Exception as e:
+            raise Exception('Unknown codec: {}'.format(content_type))
+
+        try:
+            return codec, codec.decode(body)
         except Exception as e:
             raise Exception('Failed to decode message: {}'.format(str(e)))
 
@@ -256,7 +268,7 @@ class Node(object):
         delivered via `fanout` exchange.
         """
         try:
-            event, data = self._decode_message(body)
+            requested_codec, (event, data) = self._decode_message(properties, body)
         except Exception as e:
             log.error(str(e))
         else:

@@ -2,11 +2,10 @@
 #monkey.patch_all()
 
 import pika
-import pickle
 import uuid
 from threading import Thread, Event
 
-from isc import log
+from isc import codecs, log
 
 
 class IPCException(Exception):
@@ -46,13 +45,23 @@ class FutureResult(object):
             return False
         return True
 
-    def happen(self, exception, value):
+    def resolve(self, value):
         """
         Fulfills the result and sets "ready" event.
         """
-        self.exception = exception
-        self.value = value
-        self.event.set()
+        if not self.event.is_set():
+            self.exception = None
+            self.value = value
+            self.event.set()
+
+    def reject(self, exception):
+        """
+        Fulfills the result and sets "ready" event.
+        """
+        if not self.event.is_set():
+            self.exception = exception
+            self.value = None
+            self.event.set()
 
 
 class Connection(object):
@@ -60,9 +69,11 @@ class Connection(object):
     Represents a single low-level connection to the ISC messaging broker.
     Thread-safe.
     """
-    def __init__(self, host, exchange):
+    def __init__(self, host, exchange, codec):
         self.host = host
         self.exchange = exchange
+        self.codec = None
+        self.set_codec(codec)
         self.future_results = {}
 
     def connect(self):
@@ -101,6 +112,12 @@ class Connection(object):
     def stop_consuming(self):
         self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
 
+    def set_codec(self, codec):
+        if isinstance(codec, codecs.AbstractCodec):
+            self.codec = codec
+        else:
+            self.codec = codecs.PickleCodec()
+
     def on_response(self, channel, method, properties, body):
         """
         Called when a message is consumed.
@@ -111,12 +128,16 @@ class Connection(object):
             log.error('FIXME: This should not happen.')
             return
         try:
-            exception, result = pickle.loads(body)
+            exception, result = self.codec.decode(body)
             if exception:
                 exception = RemoteException(exception)
         except Exception as e:  # pragma: no cover
             exception, result = LocalException(str(e)), None
-        future_result.happen(exception, result)
+
+        if exception:
+            future_result.reject(exception)
+        else:
+            future_result.resolve(result)
 
     def call(self, service, method, *args, **kwargs):
         """
@@ -128,9 +149,13 @@ class Connection(object):
         self.future_results[corr_id] = future_result
 
         self.channel.basic_publish(
-            exchange=self.exchange, routing_key='{}_service_{}'.format(self.exchange, service), body=pickle.dumps((method, args, kwargs)),
+            exchange=self.exchange,
+            routing_key='{}_service_{}'.format(self.exchange, service),
+            body=self.codec.encode((method, args, kwargs)),
             properties=pika.BasicProperties(
-                reply_to=self.callback_queue, correlation_id=corr_id
+                reply_to=self.callback_queue,
+                correlation_id=corr_id,
+                content_type=self.codec.content_type
             )
         )
 
@@ -143,9 +168,12 @@ class Connection(object):
         corr_id = str(uuid.uuid4())
 
         self.channel.basic_publish(
-            exchange='{}_fanout'.format(self.exchange), routing_key='', body=pickle.dumps((event, data)),
+            exchange='{}_fanout'.format(self.exchange),
+            routing_key='',
+            body=self.codec.encode((event, data)),
             properties=pika.BasicProperties(
-                correlation_id=corr_id
+                correlation_id=corr_id,
+                content_type=self.codec.content_type
             )
         )
 
@@ -183,8 +211,8 @@ class Client(object):
     Provides simple interface to the Connection.
     Thread-safe.
     """
-    def __init__(self, hostname='127.0.0.1', timeout=5, exchange='isc'):
-        self.connection = Connection(hostname, exchange)
+    def __init__(self, hostname='127.0.0.1', timeout=5, exchange='isc', codec=None):
+        self.connection = Connection(hostname, exchange, codec)
         self.timeout = timeout
         self._thread = None
 
@@ -201,6 +229,9 @@ class Client(object):
 
     def set_timeout(self, timeout):
         self.timeout = timeout
+
+    def set_codec(self, codec):
+        self.connection.set_codec(codec)
 
     def invoke(self, service, method, *args, **kwargs):
         """

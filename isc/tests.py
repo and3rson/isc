@@ -7,8 +7,9 @@ from time import sleep
 from gevent import spawn
 from gevent.event import Event
 from time import time
-from .server import Node, expose, on, local_timer, pickle, log
+from .server import Node, expose, on, local_timer, log
 from .client import Client, RemoteException, TimeoutException, FutureResult
+from .codecs import JSONCodec
 
 
 class ExampleService(object):
@@ -155,7 +156,7 @@ class GenericTest(TestCase):
 
     def test_bad_message_payload(self):
         e = Event()
-        with mock.patch.object(pickle, 'loads', side_effect=Exception('boom')):
+        with mock.patch.object(self.client.connection.codec, 'encode', return_value='crap'):
             with mock.patch.object(log, 'error', side_effect=lambda *args: e.set()) as error:
                 self.client.example.add.call_async(2, 3)
                 self.assertTrue(e.wait(1), 'log.error was not called')
@@ -165,7 +166,7 @@ class GenericTest(TestCase):
 
     def test_bad_notify_payload(self):
         e = Event()
-        with mock.patch.object(pickle, 'loads', side_effect=Exception('boom')):
+        with mock.patch.object(self.client.connection.codec, 'encode', return_value='crap'):
             with mock.patch.object(log, 'error', side_effect=lambda *args: e.set()) as error:
                 self.client.notify('boom', dict(place='some_place'))
                 self.assertTrue(e.wait(1), 'log.error was not called')
@@ -174,8 +175,25 @@ class GenericTest(TestCase):
         self.client.notify('boom', dict(place='some_place'))
         self.assertEqual(self.service.stuff_done_event.wait(3), True, 'Should operate normally after error')
 
+    def test_unknown_codec(self):
+        e = Event()
+        ct_ = self.client.connection.codec.content_type
+        self.client.connection.codec.content_type = 'random_salad'
+        with mock.patch.object(log, 'error', side_effect=lambda *args: e.set()) as error:
+            self.client.example.add.call_async(2, 3)
+            self.assertTrue(e.wait(1), 'log.error was not called')
+            self.assertTrue(error.call_args[0][0].startswith('Unknown codec'))
+        self.client.connection.codec.content_type = ct_
+
+        self.assertEquals(self.client.example.add(2, 3), 5, 'Should operate normally after error')
+
     def test_slow_method(self):
         self.client.set_timeout(1)
         self.assertRaises(TimeoutException, self.client.example.slow_method)
         self.client.set_timeout(3)
         self.assertEqual(self.client.example.slow_method(), 42)
+
+    def test_multi_codec(self):
+        self.assertEqual(self.client.example.add((2,), (3,)), (2, 3), 'When using pickle codec, tuple should not be downgraded to list.')
+        self.client.set_codec(JSONCodec())
+        self.assertEqual(self.client.example.add((2,), (3,)), [2, 3], 'When using JSON codec, tuple should be downgraded to list.')
