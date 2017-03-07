@@ -54,6 +54,7 @@ class Node(object):
                 self._is_ready.set()
                 self.channel.start_consuming()
                 self._is_running = False
+                self._is_ready.clear()
             except pika.exceptions.ConnectionClosed:  # pragma: no cover
                 self._is_ready.clear()
                 log.error('Connection closed, retrying in 3 seconds')

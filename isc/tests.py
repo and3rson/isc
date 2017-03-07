@@ -101,10 +101,6 @@ class GenericTest(TestCase):
     def test_register_again(self):
         self.assertRaises(Exception, self.node.register_service, self.service)
 
-    def test_connection_failed(self):
-        client = Client('unexisting.hostname.it.should.not.exist.and.if.it.does.then.this.test.will.fail')
-        self.assertFalse(client.connect())
-
     def test_success_hooks(self):
         self.pre_call_called = False
         self.post_success_called = False

@@ -1,9 +1,7 @@
-#from gevent import monkey, spawn
-#monkey.patch_all()
-
 import pika
 import uuid
 from threading import Thread, Event
+from time import sleep
 
 from isc import codecs, log
 
@@ -75,32 +73,62 @@ class Connection(object):
         self.codec = None
         self.set_codec(codec)
         self.future_results = {}
+        self._thread = None
+        self._is_ready = Event()
+        self._is_running = False
+        self.conn = None
 
     def connect(self):
         """
         Connect to broker and create a callback queue with "exclusive" flag.
         """
-        try:
-            self.conn = pika.BlockingConnection(pika.ConnectionParameters(self.host))
-            self.conn.process_data_events = self._fix_pika_timeout(self.conn.process_data_events)
-        except:
-            log.error('RabbitMQ not running?')
-            return False
+        self._thread = Thread(target=self._run)
+        self._thread.start()
 
-        self.channel = self.conn.channel()
-        # self.channel.queue_declare(queue='test')
+    def _run(self):
+        self._is_running = True
+        while self._is_running:
+            try:
+                self.conn = pika.BlockingConnection(pika.ConnectionParameters(self.host))
+                self.conn.process_data_events = self._fix_pika_timeout(self.conn.process_data_events)
 
-        self.callback_queue = self.channel.queue_declare(exclusive=True).method.queue
-        self.channel.queue_bind(self.callback_queue, exchange=self.exchange)
+                self.channel = self.conn.channel()
+                # self.channel.queue_declare(queue='test')
 
-        self.channel.basic_consume(self.on_response, no_ack=True, queue=self.callback_queue)
+                self.callback_queue = self._create_callback_queue(self.channel, self.exchange, self.on_response)
 
-        return True
+                log.info('Ready')
+
+                self._is_ready.set()
+                self.start_consuming()
+                self._is_running = False
+                self._is_ready.clear()
+            except pika.exceptions.ConnectionClosed:  # pragma: no cover
+                # TODO: Cover this
+                self._is_ready.clear()
+                log.error('Connection closed, retrying in 3 seconds')
+                sleep(3)
+                continue
+        log.info('Client stopped')
+
+    def _wait_for_ready(self):
+        """
+        Blocks until a connection is established.
+        """
+        self._is_ready.wait()
 
     def _fix_pika_timeout(self, process_data_events):
         def process_data_events_new(time_limit=0):
             return process_data_events(time_limit=1)
         return process_data_events_new
+
+    def _create_callback_queue(self, channel, exchange, on_response):
+        callback_queue = channel.queue_declare(exclusive=True).method.queue
+        channel.queue_bind(callback_queue, exchange=exchange)
+
+        channel.basic_consume(on_response, no_ack=True, queue=callback_queue)
+
+        return callback_queue
 
     def start_consuming(self):
         """
@@ -110,7 +138,10 @@ class Connection(object):
         self.channel.start_consuming()
 
     def stop_consuming(self):
-        self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
+        self._is_running = False
+        if self.conn is not None:
+            self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
+        self._thread.join()
 
     def set_codec(self, codec):
         if isinstance(codec, codecs.AbstractCodec):
@@ -143,6 +174,7 @@ class Connection(object):
         """
         Serialize & publish method call request.
         """
+        self._wait_for_ready()
         corr_id = str(uuid.uuid4())
 
         future_result = FutureResult('{}.{}'.format(service, method))
@@ -165,6 +197,7 @@ class Connection(object):
         """
         Serialize & publish notification.
         """
+        self._wait_for_ready()
         corr_id = str(uuid.uuid4())
 
         self.channel.basic_publish(
@@ -240,15 +273,11 @@ class Client(object):
         self._thread = None
 
     def connect(self):
-        if not self.connection.connect():
-            return False
-
-        self._thread = Thread(target=self.connection.start_consuming)
-        self._thread.start()
+        self.connection.connect()
+        self.connection._wait_for_ready()
 
     def stop(self):
         self.connection.stop_consuming()
-        self._thread.join()
 
     def set_timeout(self, timeout):
         self.timeout = timeout
