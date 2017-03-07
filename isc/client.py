@@ -62,6 +62,9 @@ class FutureResult(object):
             self.event.set()
 
     def is_ready(self):
+        """
+        Checks if this result has been resolved or rejected.
+        """
         return self.event.is_set()
 
 
@@ -140,12 +143,18 @@ class Connection(object):
         self.channel.start_consuming()
 
     def stop_consuming(self):
+        """
+        Stops the client and waits for its termination.
+        """
         self._is_running = False
         if self.conn is not None:
             self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
         self._thread.join()
 
     def set_codec(self, codec):
+        """
+        Sets a codec for this clent.
+        """
         if isinstance(codec, codecs.AbstractCodec):
             self.codec = codec
         else:
@@ -280,12 +289,21 @@ class Client(object):
             self.connection._wait_for_ready()
 
     def stop(self):
+        """
+        Stops this client.
+        """
         self.connection.stop_consuming()
 
     def set_timeout(self, timeout):
+        """
+        Sets timeout for waiting for results on this client.
+        """
         self.timeout = timeout
 
     def set_codec(self, codec):
+        """
+        Sets codec for this client.
+        """
         self.connection.set_codec(codec)
 
     def invoke(self, service, method, *args, **kwargs):
