@@ -6,7 +6,7 @@ from setuptools import setup
 
 setup(
     name='isclib',
-    version='0.9',
+    version='0.10',
     description='ISC: Inter-service communication layer for Python.',
     author="Andrew Dunai",
     author_email='andrew@dun.ai',
@@ -14,7 +14,7 @@ setup(
     license='GPLv3',
     packages=['isc'],
     include_package_data=True,
-    install_requires=['setuptools', 'gevent', 'pika', 'coloredlogs'],
+    install_requires=['setuptools', 'gevent', 'pika'],
     zip_safe=False,
     classifiers=[
         'Development Status :: 5 - Production/Stable',
