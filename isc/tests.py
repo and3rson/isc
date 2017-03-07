@@ -10,6 +10,7 @@ from time import time
 from .server import Node, expose, on, local_timer, log
 from .client import Client, RemoteException, TimeoutException, FutureResult
 from .codecs import JSONCodec
+from threading import Thread
 
 
 class ExampleService(object):
@@ -55,11 +56,14 @@ class GenericTest(TestCase):
         self.node.wait_for_ready()
         self.client = Client(exchange='isc-unittest')
         self.client.connect()
+        self.clients = []
 
     def tearDown(self):
         self.client.stop()
         self.node.stop()
         self.node_greenlet.join()
+        for client in self.clients:
+            client.stop()
 
     def test_method_success(self):
         self.assertEqual(self.client.example.add(2, 3), 5)
@@ -100,6 +104,36 @@ class GenericTest(TestCase):
 
     def test_register_again(self):
         self.assertRaises(Exception, self.node.register_service, self.service)
+
+    def test_reconnect_and_redeliver(self):
+        class SomeClient(Thread):
+            def __init__(self, client):
+                super(SomeClient, self).__init__()
+                self.client = client
+                self.future_result = None
+                self.sent = Event()
+
+            def run(self):
+                self.future_result = self.client.example.add.call_async(2, 3)
+                self.sent.set()
+
+        client = Client('666.666.666.666', exchange='isc-unittest')
+        self.clients.append(client)
+
+        client_thread = SomeClient(client)
+        client_thread.start()
+
+        client.connect(wait_for_ready=False)
+        sleep(2)
+        self.assertFalse(client.connection._is_ready.is_set())
+        sleep(2)
+
+        self.assertFalse(client.connection._is_ready.is_set())
+        client.connection.host = '127.0.0.1'
+        self.assertTrue(client.connection._wait_for_ready(5))
+        self.assertTrue(client_thread.sent.wait(5))
+        self.assertTrue(client_thread.future_result.wait(5))
+        self.assertEqual(client_thread.future_result.value, 5)
 
     def test_success_hooks(self):
         self.pre_call_called = False

@@ -47,7 +47,7 @@ class FutureResult(object):
         """
         Resolves this promise with result and sets "ready" event.
         """
-        if not self.event.is_set():
+        if not self.is_ready():
             self.exception = None
             self.value = value
             self.event.set()
@@ -56,10 +56,13 @@ class FutureResult(object):
         """
         Rejects this promise with exception and sets "ready" event.
         """
-        if not self.event.is_set():
+        if not self.is_ready():
             self.exception = exception
             self.value = None
             self.event.set()
+
+    def is_ready(self):
+        return self.event.is_set()
 
 
 class Connection(object):
@@ -103,19 +106,18 @@ class Connection(object):
                 self.start_consuming()
                 self._is_running = False
                 self._is_ready.clear()
-            except pika.exceptions.ConnectionClosed:  # pragma: no cover
-                # TODO: Cover this
+            except Exception as e:
                 self._is_ready.clear()
-                log.error('Connection closed, retrying in 3 seconds')
+                log.error('Connection closed, retrying in 3 seconds. Error was: {}'.format(str(e)))
                 sleep(3)
                 continue
         log.info('Client stopped')
 
-    def _wait_for_ready(self):
+    def _wait_for_ready(self, timeout=None):
         """
         Blocks until a connection is established.
         """
-        self._is_ready.wait()
+        return self._is_ready.wait(timeout)
 
     def _fix_pika_timeout(self, process_data_events):
         def process_data_events_new(time_limit=0):
@@ -267,14 +269,15 @@ class Client(object):
     Provides simple interface to the Connection.
     Thread-safe.
     """
-    def __init__(self, hostname='127.0.0.1', timeout=5, exchange='isc', codec=None):
+    def __init__(self, hostname='127.0.0.1', timeout=10, exchange='isc', codec=None):
         self.connection = Connection(hostname, exchange, codec)
         self.timeout = timeout
         self._thread = None
 
-    def connect(self):
+    def connect(self, wait_for_ready=True):
         self.connection.connect()
-        self.connection._wait_for_ready()
+        if wait_for_ready:
+            self.connection._wait_for_ready()
 
     def stop(self):
         self.connection.stop_consuming()
