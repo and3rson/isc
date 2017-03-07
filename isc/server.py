@@ -25,8 +25,8 @@ class Node(object):
         self.params = pika.ConnectionParameters(hostname)
         self._is_running = False
         self.codecs = {}
-        self.register_codec(codecs.PickleCodec)
-        self.register_codec(codecs.JSONCodec)
+        self.register_codec(codecs.PickleCodec())
+        self.register_codec(codecs.JSONCodec())
         self.hooks = {
             'pre_call': set(),
             'post_success': set(),
@@ -42,7 +42,7 @@ class Node(object):
         while self._is_running:
             try:
                 self.conn = pika.BlockingConnection(self.params)
-                self.conn.process_data_events = self.fix_pika_timeout(self.conn.process_data_events)
+                self.conn.process_data_events = self._fix_pika_timeout(self.conn.process_data_events)
                 self.channel = self.conn.channel()
 
                 self._create_service_queues(self.channel, self.services)
@@ -69,8 +69,13 @@ class Node(object):
             raise Exception('Service {} is already registered.'.format(service.name))
         self.services[service.name] = service
 
-    def register_codec(self, codec_class):
-        self.codecs[codec_class.content_type] = codec_class()
+    def register_codec(self, codec):
+        """
+        Registers a codec for this server.
+        Codec must be an instance of :class:`isc.codecs.AbstractCodec` subclass.
+        Doesn't remove previously registered codecs.
+        """
+        self.codecs[codec.content_type] = codec
 
     def add_hook(self, name):
         """
@@ -94,7 +99,7 @@ class Node(object):
         """
         self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
 
-    def fix_pika_timeout(self, process_data_events):
+    def _fix_pika_timeout(self, process_data_events):
         """
         Fixes pika timeout (default is 5, we want it to be 1 for faster shutdown)
         """

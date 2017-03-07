@@ -47,7 +47,7 @@ class FutureResult(object):
 
     def resolve(self, value):
         """
-        Fulfills the result and sets "ready" event.
+        Resolves this promise with result and sets "ready" event.
         """
         if not self.event.is_set():
             self.exception = None
@@ -56,7 +56,7 @@ class FutureResult(object):
 
     def reject(self, exception):
         """
-        Fulfills the result and sets "ready" event.
+        Rejects this promise with exception and sets "ready" event.
         """
         if not self.event.is_set():
             self.exception = exception
@@ -82,7 +82,7 @@ class Connection(object):
         """
         try:
             self.conn = pika.BlockingConnection(pika.ConnectionParameters(self.host))
-            self.conn.process_data_events = self.fix_pika_timeout(self.conn.process_data_events)
+            self.conn.process_data_events = self._fix_pika_timeout(self.conn.process_data_events)
         except:
             log.error('RabbitMQ not running?')
             return False
@@ -97,7 +97,7 @@ class Connection(object):
 
         return True
 
-    def fix_pika_timeout(self, process_data_events):
+    def _fix_pika_timeout(self, process_data_events):
         def process_data_events_new(time_limit=0):
             return process_data_events(time_limit=1)
         return process_data_events_new
@@ -181,18 +181,25 @@ class Connection(object):
 class ServiceProxy(object):
     """
     Convenience wrapper for service.
+
+    It allows you to perform attribute chaining (e. g. :code:`client.example.add(2, 3)`)
     """
     def __init__(self, client, service_name):
         self.client = client
         self.service_name = service_name
 
     def __getattr__(self, attr):
+        """
+        Returns :class:`.MethodProxy`
+        """
         return MethodProxy(self.client, self.service_name, attr)
 
 
 class MethodProxy(object):
     """
     Convenience wrapper for method.
+
+    It allows you to perform attribute chaining (e. g. :code:`client.example.add(2, 3)`)
     """
     def __init__(self, client, service_name, method_name):
         self.client = client
@@ -200,9 +207,25 @@ class MethodProxy(object):
         self.method_name = method_name
 
     def __call__(self, *args, **kwargs):
+        """
+        Finalizes the chain & performs actual RPC invocation.
+        Blocks while waiting for result.
+
+        Returns the result.
+
+        This is same as calling :func:`~isc.client.Client.invoke`
+        """
         return self.client.invoke(self.service_name, self.method_name, *args, **kwargs)
 
     def call_async(self, *args, **kwargs):
+        """
+        Finalizes the chain & performs actual RPC invocation.
+        Does not block.
+
+        Returns :class:`.FutureResult`.
+
+        This is same as calling :func:`~isc.client.Client.invoke_async`
+        """
         return self.client.invoke_async(self.service_name, self.method_name, *args, **kwargs)
 
 
@@ -250,7 +273,7 @@ class Client(object):
 
     def invoke_async(self, service, method, *args, **kwargs):
         """
-        Calls a remote method and returns a `FutureResult`.
+        Calls a remote method and returns a :class:`.FutureResult`.
         Does not block.
         """
         return self.connection.call(service, method, *args, **kwargs)
@@ -264,7 +287,7 @@ class Client(object):
     def __getattr__(self, attr):
         """
         Convenience method.
-        Returns ServiceProxy to make it look like we're actually calling
+        Returns :class:`.ServiceProxy` to make it look like we're actually calling
         local methods from local objects.
         """
         return ServiceProxy(self, attr)
