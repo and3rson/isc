@@ -38,7 +38,7 @@ class FutureResult(object):
         """
         Blocks until data is ready.
         """
-        if not self.event.wait(timeout=float(timeout)):
+        if not self.event.wait(timeout=timeout):
             self.exception = TimeoutException()
             return False
         return True
@@ -61,6 +61,11 @@ class FutureResult(object):
             self.value = None
             self.event.set()
 
+    def reset(self):
+        self.event.clear()
+        self.exception = None
+        self.value = None
+
     def is_ready(self):
         """
         Checks if this result has been resolved or rejected.
@@ -73,16 +78,18 @@ class Connection(object):
     Represents a single low-level connection to the ISC messaging broker.
     Thread-safe.
     """
-    def __init__(self, host, exchange, codec):
+    def __init__(self, host, exchange, codec, reconnect_timeout):
         self.host = host
         self.exchange = exchange
         self.codec = None
+        self.reconnect_timeout = reconnect_timeout
         self.set_codec(codec)
         self.future_results = {}
         self._thread = None
-        self._is_ready = Event()
         self._is_running = False
         self.conn = None
+
+        self._conn_event = FutureResult('ConnEvent')
 
     def connect(self):
         """
@@ -90,6 +97,7 @@ class Connection(object):
         """
         self._thread = Thread(target=self._run)
         self._thread.start()
+        return self._conn_event
 
     def _run(self):
         self._is_running = True
@@ -105,22 +113,32 @@ class Connection(object):
 
                 log.info('Ready')
 
-                self._is_ready.set()
+                self._conn_event.resolve(True)
                 self.start_consuming()
                 self._is_running = False
-                self._is_ready.clear()
+                self._conn_event.reset()
+                self._conn_event.resolve(False)
             except Exception as e:
-                self._is_ready.clear()
-                log.error('Connection closed, retrying in 3 seconds. Error was: {}'.format(str(e)))
-                sleep(3)
-                continue
+                self._conn_event.reset()
+                if self.reconnect_timeout:
+                    log.error('Connection closed, retrying in 3 seconds. Error was: {}'.format(str(e)))
+                    sleep(self.reconnect_timeout)
+                    continue
+                else:
+                    self._conn_event.reject(e)
+                    self._is_running = False
+                    raise LocalException(
+                        'Failed to connect to AMQP.\n'
+                        'Not reconnecting because reconnect_timeout = 0.\n'
+                        'Error was: {}'.format(str(e))
+                    )
         log.info('Client stopped')
 
     def _wait_for_ready(self, timeout=None):
         """
         Blocks until a connection is established.
         """
-        return self._is_ready.wait(timeout)
+        return self._conn_event.wait(timeout)
 
     def _fix_pika_timeout(self, process_data_events):
         def process_data_events_new(time_limit=0):
@@ -278,15 +296,20 @@ class Client(object):
     Provides simple interface to the Connection.
     Thread-safe.
     """
-    def __init__(self, hostname='127.0.0.1', timeout=10, exchange='isc', codec=None):
-        self.connection = Connection(hostname, exchange, codec)
+    def __init__(self, hostname='127.0.0.1', timeout=10, reconnect_timeout=3, exchange='isc', codec=None):
+        self.connection = Connection(hostname, exchange, codec, reconnect_timeout)
         self.timeout = timeout
         self._thread = None
 
     def connect(self, wait_for_ready=True):
-        self.connection.connect()
+        future_result = self.connection.connect()
         if wait_for_ready:
-            self.connection._wait_for_ready()
+            future_result.wait()
+            if not future_result.value:
+                log.error('Disconnected.')
+            if future_result.exception:
+                log.error('Error while trying to connect: {}'.format(str(future_result.exception)))
+        return future_result
 
     def stop(self):
         """

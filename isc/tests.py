@@ -123,12 +123,12 @@ class GenericTest(TestCase):
         client_thread = SomeClient(client)
         client_thread.start()
 
-        client.connect(wait_for_ready=False)
+        future_result = client.connect(wait_for_ready=False)
         sleep(2)
-        self.assertFalse(client.connection._is_ready.is_set())
+        self.assertFalse(future_result.value)
         sleep(2)
 
-        self.assertFalse(client.connection._is_ready.is_set())
+        self.assertFalse(future_result.value)
         client.connection.host = '127.0.0.1'
         self.assertTrue(client.connection._wait_for_ready(5))
         self.assertTrue(client_thread.sent.wait(5))
@@ -227,3 +227,10 @@ class GenericTest(TestCase):
         self.assertEqual(self.client.example.add((2,), (3,)), (2, 3), 'When using pickle codec, tuple should not be downgraded to list.')
         self.client.set_codec(JSONCodec())
         self.assertEqual(self.client.example.add((2,), (3,)), [2, 3], 'When using JSON codec, tuple should be downgraded to list.')
+
+    def test_no_reconnect(self):
+        client = Client('127.0.0.1', exchange='unexisting-exchange-this-will-fail', reconnect_timeout=0)
+        self.clients.append(client)
+        future_result = client.connect(wait_for_ready=True)
+        self.assertFalse(future_result.value)
+        self.assertTrue(future_result.exception)
