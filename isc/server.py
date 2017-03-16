@@ -201,7 +201,7 @@ class Node(object):
         Decodes message body.
         Raises `Exception` on error.
         """
-        content_type = properties.content_type
+        content_type = properties.headers.get('codec_content_type')
 
         try:
             codec = self.codecs[content_type]
