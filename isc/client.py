@@ -96,6 +96,7 @@ class Connection(object):
         Connect to broker and create a callback queue with "exclusive" flag.
         """
         self._thread = Thread(target=self._run)
+        self._thread.daemon = True
         self._thread.start()
         return self._conn_event
 
