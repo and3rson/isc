@@ -3,7 +3,10 @@
 from isc.client import Client, RemoteException, TimeoutException
 
 client = Client(exchange='isctest')
-client.connect()
+client.start()
+
+import time
+time.sleep(2)
 
 client.notify('boom', dict(foo='bar'))
 
@@ -40,7 +43,7 @@ else:
 
 
 try:
-    client.set_timeout(1)
+    client.set_invoke_timeout(1)
     client.example.slow_method()
 except TimeoutException:
     pass

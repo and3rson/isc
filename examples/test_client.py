@@ -26,7 +26,7 @@ class Process(Thread):
 
 
 client = Client(exchange='isctest')
-client.connect()
+client.start()
 
 client.example.start_tracking()
 

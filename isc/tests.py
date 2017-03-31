@@ -55,7 +55,7 @@ class GenericTest(TestCase):
         self.node_greenlet = spawn(self.node.run)
         self.node.wait_for_ready()
         self.client = Client(exchange='isc-unittest')
-        self.client.connect()
+        self.client.start()
         self.clients = []
 
     def tearDown(self):
@@ -85,7 +85,7 @@ class GenericTest(TestCase):
         # self.assertRaises(RemoteException, self.client.unexisting_service.add, (2, 3))
 
     def test_unexisting_service(self):
-        self.client.set_timeout(1)
+        self.client.set_invoke_timeout(1)
         self.assertRaises(TimeoutException, self.client.unexisting_service.some_method)
 
     def test_raises_exception(self):
@@ -106,69 +106,23 @@ class GenericTest(TestCase):
         self.assertRaises(Exception, self.node.register_service, self.service)
 
     def test_reconnect_and_redeliver(self):
-        # TODO: Fix this
-        """
-        class SomeClient(Thread):
-            def __init__(self, client):
-                super(SomeClient, self).__init__()
-                self.client = client
-                self.future_result = None
-                self.sent = Event()
-
-            def run(self):
-                self.future_result = self.client.example.add.call_async(2, 3)
-                self.sent.set()
-
-        client = Client('666.666.666.666', exchange='isc-unittest')
+        client = Client(host='amqp://127.0.0.1:55553', exchange='isc-unittest')
+        client.start()
         self.clients.append(client)
 
-        client_thread = SomeClient(client)
-        client_thread.start()
+        future_result = client.example.add.call_async(2, 3)
 
-        future_result = client.connect(wait_for_ready=False)
-        sleep(2)
-        self.assertFalse(future_result.value)
-        sleep(2)
+        error_event = Event()
+        client.on_error += error_event.set
+        self.assertTrue(error_event.wait(5))
 
-        self.assertFalse(future_result.value)
-        client.connection.host = '127.0.0.1'
-        self.assertTrue(client.connection._wait_for_ready(5))
-        self.assertTrue(client_thread.sent.wait(5))
-        self.assertTrue(client_thread.future_result.wait(5))
-        self.assertEqual(client_thread.future_result.value, 5)
-        """
-        pass
+        client.host = 'amqp://127.0.0.1:5672'
 
-    def test_success_hooks(self):
-        self.pre_call_called = False
-        self.post_success_called = False
-        self.post_error_called = False
+        connect_event = Event()
+        client.on_connect += connect_event.set
+        self.assertTrue(connect_event.wait(5))
 
-        @self.node.add_hook('pre_call')
-        def pre_call(*args):
-            self.pre_call_called = True
-
-        @self.node.add_hook('post_success')
-        def post_success(*args):
-            self.post_success_called = True
-
-        @self.node.add_hook('post_error')
-        def post_error(*args):
-            self.post_error_called = True
-
-        self.assertEqual(self.client.example.add(2, 3), 5)
-        self.assertTrue(self.pre_call_called)
-        self.assertTrue(self.post_success_called)
-        self.assertFalse(self.post_error_called)
-
-        self.pre_call_called = False
-        self.post_success_called = False
-        self.post_error_called = False
-
-        self.assertRaises(RemoteException, self.client.example.add, (2, '3'))
-        self.assertTrue(self.pre_call_called)
-        self.assertFalse(self.post_success_called)
-        self.assertTrue(self.post_error_called)
+        self.assertTrue(future_result.wait(5))
 
     def test_local_timer_timings(self):
         # Measure time taken by timer to execute.
@@ -188,43 +142,31 @@ class GenericTest(TestCase):
 
         self.assertAlmostEqual(timediff_avg, 1, 1)
 
-    def test_bad_message_payload(self):
-        e = Event()
-        with mock.patch.object(self.client.connection.codec, 'encode', return_value='crap'):
-            with mock.patch.object(log, 'error', side_effect=lambda *args: e.set()) as error:
-                self.client.example.add.call_async(2, 3)
-                self.assertTrue(e.wait(1), 'log.error was not called')
-                self.assertTrue(error.call_args[0][0].startswith('Failed to decode message'))
+    # def test_bad_message_payload(self):
+    #     e = Event()
+    #     with mock.patch.object(self.client.codec, 'encode', return_value='crap'):
+    #         with mock.patch.object(log, 'error', side_effect=lambda *args: e.set()) as error:
+    #             self.client.example.add.call_async(2, 3)
+    #             self.assertTrue(e.wait(1), 'log.error was not called')
+    #             self.assertTrue(error.call_args[0][0].startswith('Failed to decode message'))
 
-        self.assertEquals(self.client.example.add(2, 3), 5, 'Should operate normally after error')
+    #     self.assertEquals(self.client.example.add(2, 3), 5, 'Should operate normally after error')
 
-    def test_bad_notify_payload(self):
-        e = Event()
-        with mock.patch.object(self.client.connection.codec, 'encode', return_value='crap'):
-            with mock.patch.object(log, 'error', side_effect=lambda *args: e.set()) as error:
-                self.client.notify('boom', dict(place='some_place'))
-                self.assertTrue(e.wait(1), 'log.error was not called')
-                self.assertTrue(error.call_args[0][0].startswith('Failed to decode message'))
+    # def test_bad_notify_payload(self):
+    #     e = Event()
+    #     with mock.patch.object(self.client.codec, 'encode', return_value='crap'):
+    #         with mock.patch.object(log, 'error', side_effect=lambda *args: e.set()) as error:
+    #             self.client.notify('boom', dict(place='some_place'))
+    #             self.assertTrue(e.wait(1), 'log.error was not called')
+    #             self.assertTrue(error.call_args[0][0].startswith('Failed to decode message'))
 
-        self.client.notify('boom', dict(place='some_place'))
-        self.assertEqual(self.service.stuff_done_event.wait(3), True, 'Should operate normally after error')
-
-    def test_unknown_codec(self):
-        e = Event()
-        ct_ = self.client.connection.codec.content_type
-        self.client.connection.codec.content_type = 'random_salad'
-        with mock.patch.object(log, 'error', side_effect=lambda *args: e.set()) as error:
-            self.client.example.add.call_async(2, 3)
-            self.assertTrue(e.wait(1), 'log.error was not called')
-            self.assertTrue(error.call_args[0][0].startswith('Unknown codec'))
-        self.client.connection.codec.content_type = ct_
-
-        self.assertEquals(self.client.example.add(2, 3), 5, 'Should operate normally after error')
+    #     self.client.notify('boom', dict(place='some_place'))
+    #     self.assertEqual(self.service.stuff_done_event.wait(3), True, 'Should operate normally after error')
 
     def test_slow_method(self):
-        self.client.set_timeout(1)
+        self.client.set_invoke_timeout(1)
         self.assertRaises(TimeoutException, self.client.example.slow_method)
-        self.client.set_timeout(3)
+        self.client.set_invoke_timeout(3)
         self.assertEqual(self.client.example.slow_method(), 42)
 
     def test_multi_codec(self):
@@ -233,8 +175,30 @@ class GenericTest(TestCase):
         self.assertEqual(self.client.example.add((2,), (3,)), [2, 3], 'When using JSON codec, tuple should be downgraded to list.')
 
     def test_no_reconnect(self):
-        client = Client('127.0.0.1', exchange='unexisting-exchange-this-will-fail', reconnect_timeout=0)
+        client = Client('amqp://127.0.0.1:55553', exchange='unexisting-exchange-this-will-fail', reconnect_timeout=0)
         self.clients.append(client)
-        future_result = client.connect(wait_for_ready=True)
-        self.assertFalse(future_result.value)
-        self.assertTrue(future_result.exception)
+
+        connect_event = Event()
+        client.on_connect += connect_event.set
+        error_event = Event()
+        client.on_error += error_event.set
+
+        client.start()
+
+        sleep(3)
+
+        self.assertFalse(connect_event.is_set())
+        self.assertTrue(error_event.wait(3))
+
+    def test_eventhook(self):
+        client = Client(exchange='isc-unittest')
+        self.clients.append(client)
+
+        event = Event()
+
+        client.on_connect += event.set
+
+        client.start()
+        self.assertTrue(event.wait(5))
+
+        client.on_connect -= event.set

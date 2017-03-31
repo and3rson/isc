@@ -2,11 +2,17 @@
 
 from isc.client import Client
 
-client = Client(exchange='isctest')
-client.connect()
+# import socket
+# socket.setdefaulttimeout(1)
 
-assert client.example.add(2, 3) == 5
-import time; time.sleep(1)
+client = Client(host='127.0.0.1', exchange='isctest')
+client.start()
+
+client.set_invoke_timeout(10)
+
+# assert client.invoke('example', 'add', 2, 3) == 5
+# print('CORRECT!')
+#import time; time.sleep(1)
 assert client.example.add(2, 3) == 5
 
 client.stop()
