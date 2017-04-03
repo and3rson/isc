@@ -6,7 +6,7 @@ from setuptools import setup
 
 setup(
     name='isclib',
-    version='0.15',
+    version='0.16',
     description='ISC: Inter-service communication layer for Python.',
     author="Andrew Dunai",
     author_email='andrew@dun.ai',
@@ -14,7 +14,7 @@ setup(
     license='GPLv3',
     packages=['isc'],
     include_package_data=True,
-    install_requires=['setuptools', 'gevent', 'pika'],
+    install_requires=['setuptools', 'gevent', 'pika', 'kombu'],
     zip_safe=False,
     classifiers=[
         'Development Status :: 5 - Production/Stable',
@@ -24,5 +24,5 @@ setup(
         'Operating System :: OS Independent',
         'Programming Language :: Python',
     ],
-    keywords='rpc,python2,python3,python,gevent,amqp,pika',
+    keywords='rpc,python2,python3,python,gevent,amqp,pika,kombu',
 )
