@@ -116,7 +116,7 @@ class GenericTest(TestCase):
         client.on_error += error_event.set
         self.assertTrue(error_event.wait(5))
 
-        client.host = 'amqp://127.0.0.1:5672'
+        client._consumer._hostname = 'amqp://127.0.0.1:5672'
 
         connect_event = Event()
         client.on_connect += connect_event.set
@@ -169,10 +169,14 @@ class GenericTest(TestCase):
         self.client.set_invoke_timeout(3)
         self.assertEqual(self.client.example.slow_method(), 42)
 
-    def test_multi_codec(self):
+    def test_pickle_codec(self):
         self.assertEqual(self.client.example.add((2,), (3,)), (2, 3), 'When using pickle codec, tuple should not be downgraded to list.')
-        self.client.set_codec(JSONCodec())
-        self.assertEqual(self.client.example.add((2,), (3,)), [2, 3], 'When using JSON codec, tuple should be downgraded to list.')
+
+    def test_json_codec(self):
+        client = Client(codec=JSONCodec(), exchange='isc-unittest')
+        client.start()
+        self.clients.append(client)
+        self.assertEqual(client.example.add((2,), (3,)), [2, 3], 'When using JSON codec, tuple should be downgraded to list.')
 
     def test_no_reconnect(self):
         client = Client('amqp://127.0.0.1:55553', exchange='unexisting-exchange-this-will-fail', reconnect_timeout=0)

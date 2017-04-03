@@ -1,7 +1,6 @@
 import kombu
 import uuid
 import socket
-from traceback import format_exc
 from threading import Thread, Event
 from six.moves.queue import Queue, Empty
 from time import sleep
@@ -33,11 +32,12 @@ class FutureResult(object):
     Provides interface to block until future data is ready.
     Thread-safe.
     """
-    def __init__(self, cannonical_name):
+    def __init__(self, cannonical_name, **extra):
         self.event = Event()
         self.exception = None
         self.value = None
         self.cannonical_name = cannonical_name
+        self.extra = extra
 
     def wait(self, timeout=5):
         """
@@ -66,11 +66,6 @@ class FutureResult(object):
             self.value = None
             self.event.set()
 
-    # def reset(self):  # pragma: no cover
-    #     self.event.clear()
-    #     self.exception = None
-    #     self.value = None
-
     def is_ready(self):
         """
         Checks if this result has been resolved or rejected.
@@ -78,38 +73,83 @@ class FutureResult(object):
         return self.event.is_set()
 
 
+class QueuedRequest(object):
+    def __init__(self, codec, **kwargs):
+        self.codec = codec
+        self.correlation_id = str(uuid.uuid4())
+        self.__dict__.update(**kwargs)
+
+
+class QueuedInvocation(QueuedRequest):
+    def __init__(self, codec, service, method, args, kwargs):
+        super(QueuedInvocation, self).__init__(
+            codec,
+            service=service,
+            method=method,
+            args=args,
+            kwargs=kwargs
+        )
+
+
+class QueuedNotification(QueuedRequest):
+    def __init__(self, codec, event, data):
+        super(QueuedNotification, self).__init__(
+            codec,
+            event=event,
+            data=data
+        )
+
+
 class ConsumerThread(Thread):
-    def __init__(self, client):
-        self.client = proxy(client)
+    def __init__(self, hostname, exchange_name, connect_timeout, reconnect_timeout, codec):
         super(ConsumerThread, self).__init__()
+
         self.daemon = True
+        self._is_running = False
+        self._is_connected = False
+
+        self._hostname = hostname
+        self._exchange_name = exchange_name
+
+        self.on_connect = EventHook()
+        self.on_error = EventHook()
+        self.on_disconnect = EventHook()
+        self.on_message = EventHook()
+
+        self._connect_timeout = connect_timeout
+        self._reconnect_timeout = reconnect_timeout
+
+        if not isinstance(codec, codecs.AbstractCodec):
+            codec = codecs.PickleCodec()
+        self._codec = codec
 
     def run(self):
-        while True:
+        self._is_running = True
+        while self._is_running:
             try:
                 log.info('Connecting to AMQP...')
-                self.client._connect()
-                self.client._is_connected = True
-                self.client.on_connect.fire()
+                self._connect()
+                self._is_connected = True
+                self.on_connect.fire()
                 log.info('Connected to AMQP')
-                self.client._start_consuming()
-                self.client._is_connected = False
-                self.client.on_disconnect.fire()
+                self._start_consuming()
+                self._is_connected = False
+                self.on_disconnect.fire()
                 return
             except Exception as e:
-                self.client._is_connected = False
-                if self.client.reconnect_timeout:
+                self._is_connected = False
+                if self._reconnect_timeout:
                     log.error(
                         'Disconnected from AMQP.\n'
                         'Retrying in {} seconds.\n'
                         'Error was: {}'.format(
-                            self.client.reconnect_timeout,
+                            self._reconnect_timeout,
                             # format_exc()
                             str(e)
                         )
                     )
-                    self.client.on_error.fire()
-                    sleep(self.client.reconnect_timeout)
+                    self.on_error.fire()
+                    sleep(self._reconnect_timeout)
                     continue
                 else:
                     log.error(
@@ -120,46 +160,139 @@ class ConsumerThread(Thread):
                             str(e)
                         )
                     )
-                    self.client.on_error.fire()
+                    self.on_error.fire()
                     return
+
+    def _connect(self):
+        self._conn = kombu.Connection(
+            self._hostname,
+            connect_timeout=self._connect_timeout
+        )
+
+        self._channel = self._conn.channel()
+
+        self._exchange = kombu.Exchange(
+            name=self._exchange_name,
+            channel=self._channel,
+            durable=False
+        )
+
+        self._callback_queue = self._create_callback_queue(
+            self._channel,
+            self._exchange
+        )
+
+    def _create_callback_queue(self, channel, exchange):
+        name = 'response-{}'.format(uuid.uuid4())
+        callback_queue = kombu.Queue(
+            name=name,
+            exchange=exchange,
+            routing_key=name,
+            exclusive=True,
+            channel=self._channel
+        )
+        callback_queue.declare()
+        return callback_queue
+
+    def _start_consuming(self):
+        """
+        Start consuming messages.
+        This function is blocking.
+        """
+        consumer = kombu.Consumer(
+            self._conn,
+            queues=[self._callback_queue],
+            on_message=self.on_message.fire,
+            accept=[self._codec.content_type]
+        )
+
+        consumer.consume()
+
+        while self._is_running:
+            try:
+                self._conn.drain_events(timeout=0.5)
+            except socket.timeout:
+                continue
+
+    def is_connected(self):
+        return self._is_connected
+
+    def shutdown(self):
+        self._is_running = False
+
+    def get_connection(self):
+        return self._conn
+
+    def get_codec(self):
+        return self._codec
+
+    def get_exchange(self):
+        return self._exchange
+
+    def get_callback_queue(self):
+        return self._callback_queue
 
 
 class PublisherThread(Thread):
-    def __init__(self, client):
-        self.client = proxy(client)
+    def __init__(self, consumer):
+        self.consumer = proxy(consumer)
         super(PublisherThread, self).__init__()
         self.daemon = True
+        self._out_queue = Queue()
+        self._is_running = False
 
     def run(self):
-        while self.client._is_running:
-            if self.client._is_connected:
+        self._is_running = True
+        while self._is_running:
+            if self.consumer.is_connected():
                 try:
-                    request = self.client._out_queue.get(timeout=0.5)
-                    with kombu.producers[self.client.conn].acquire(block=True) as producer:
-                        if request['type'] == 'invoke':
-                            log.debug('Publishing method invocation: %s', request)
-                            producer.publish(
-                                exchange=self.client.exchange,
-                                routing_key='{}_service_{}'.format(self.client.exchange_name, request['service']),
-                                body=request['codec'].encode((request['method'], request['args'], request['kwargs'])),
-                                reply_to=self.client.callback_queue.name,
-                                correlation_id=request['corr_id'],
-                                content_type=self.client.codec.content_type,
-                            )
-                        else:
-                            log.debug('Publishing fanout notification: %s', request)
-                            producer.publish(
-                                exchange='{}_fanout'.format(self.client.exchange_name),
-                                routing_key='',
-                                body=request['codec'].encode((request['event'], request['data'])),
-                                correlation_id=request['corr_id'],
-                                content_type=self.client.codec.content_type
-                            )
+                    queued_request = self._out_queue.get(timeout=0.5)
+                    with kombu.producers[self.consumer.get_connection()].acquire(block=True) as producer:
+                        self._dispatch_request(queued_request, producer)
                 except Empty:
                     continue
             else:
                 sleep(0.5)
-                log.debug('Cannot publish, waiting for connection...')
+                log.debug('Waiting for consumer to be ready...')
+
+    def enqueue(self, queued_request):
+        self._out_queue.put(queued_request)
+
+    def _dispatch_request(self, queued_request, producer):
+        if isinstance(queued_request, QueuedInvocation):
+            log.debug('Publishing queued method invocation')
+            producer.publish(
+                exchange=self.consumer.get_exchange(),
+                routing_key='{}_service_{}'.format(
+                    self.consumer.get_exchange().name,
+                    queued_request.service
+                ),
+                body=queued_request.codec.encode((
+                    queued_request.method,
+                    queued_request.args,
+                    queued_request.kwargs
+                )),
+                reply_to=self.consumer.get_callback_queue().name,
+                correlation_id=queued_request.correlation_id,
+                content_type=self.consumer.get_codec().content_type,
+            )
+        else:
+            log.debug('Publishing queued fanout notification')
+            producer.publish(
+                exchange='{}_fanout'.format(
+                    self.consumer.get_exchange().name
+                ),
+                routing_key='',
+                body=queued_request.codec.encode((
+                    queued_request.event,
+                    queued_request.data
+                )),
+                correlation_id=queued_request.correlation_id,
+                content_type=self.consumer.get_codec().content_type
+            )
+
+    def shutdown(self):
+        self._is_running = False
 
 
 class Client(object):
@@ -168,83 +301,25 @@ class Client(object):
     Thread-safe.
     """
     def __init__(self, host='amqp://guest:guest@127.0.0.1:5672/', exchange='isc', codec=None, connect_timeout=2, reconnect_timeout=1, invoke_timeout=10):
-        self.host = host
-        self.exchange_name = exchange
-        self.codec = None
-        self.connect_timeout = connect_timeout
-        self.reconnect_timeout = reconnect_timeout
-        self.set_codec(codec)
         self.future_results = {}
-        self._is_running = False
-        self._is_connected = False
-        self.conn = None
-        self.exchange = None
-        self.invoke_timeout = invoke_timeout
 
-        self._out_queue = Queue()
+        self._invoke_timeout = invoke_timeout
 
-        self.on_connect = EventHook()
-        self.on_error = EventHook()
-        self.on_disconnect = EventHook()
+        self._consumer = ConsumerThread(host, exchange, connect_timeout, reconnect_timeout, codec)
+        self._publisher = PublisherThread(self._consumer)
+
+        self._consumer.on_message += self._on_response
+
+        self.on_connect = self._consumer.on_connect
+        self.on_error = self._consumer.on_error
+        self.on_disconnect = self._consumer.on_disconnect
 
     def start(self):
         """
         Connect to broker and create a callback queue with "exclusive" flag.
         """
-        self._is_running = True
-
-        self._consumer_thread = ConsumerThread(self)
-        self._consumer_thread.start()
-
-        self._publisher_thread = PublisherThread(self)
-        self._publisher_thread.start()
-
-    def _connect(self):
-        # self.conn = pika.BlockingConnection(pika.ConnectionParameters(self.host))
-        self.conn = kombu.Connection(self.host, connect_timeout=self.connect_timeout)
-        # self.conn.process_data_events = self._fix_pika_timeout(self.conn.process_data_events)
-
-        self.channel = self.conn.channel()
-        # self.channel.queue_declare(queue='test')
-
-        self.exchange = kombu.Exchange(name=self.exchange_name, channel=self.channel, durable=False)
-
-        self.callback_queue = self._create_callback_queue(self.channel, self.exchange)
-
-        # log.info('Ready')
-
-    # def _wait_for_ready(self, timeout=None):
-    #     """
-    #     Blocks until a connection is established.
-    #     """
-    #     return self._conn_event.wait(timeout)
-
-    def _create_callback_queue(self, channel, exchange):
-        name = 'response-{}'.format(uuid.uuid4())
-        callback_queue = kombu.Queue(name=name, exchange=exchange, routing_key=name, exclusive=True, channel=self.channel)
-        callback_queue.declare()
-        return callback_queue
-        # callback_queue = channel.queue_declare(exclusive=True).method.queue
-        # channel.queue_bind(callback_queue, exchange=exchange)
-
-        # channel.basic_consume(on_response, no_ack=True, queue=callback_queue)
-
-        # return callback_queue
-
-    def _start_consuming(self):
-        """
-        Start consuming messages.
-        This function is blocking.
-        """
-        consumer = kombu.Consumer(self.conn, queues=[self.callback_queue], on_message=self._on_response, accept=[self.codec.content_type])
-        consumer.consume()
-        while self._is_running:
-            try:
-                self.conn.drain_events(timeout=0.5)
-            except socket.timeout:
-                continue
-
-        # self.channel.start_consuming()
+        self._consumer.start()
+        self._publisher.start()
 
     def stop(self):
         """
@@ -254,18 +329,10 @@ class Client(object):
         # if self.conn is not None:
         #     self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
         # self._thread.join()
-        self._is_running = False
-        self._publisher_thread.join()
-        self._consumer_thread.join()
-
-    def set_codec(self, codec):
-        """
-        Sets a codec for this clent.
-        """
-        if isinstance(codec, codecs.AbstractCodec):
-            self.codec = codec
-        else:
-            self.codec = codecs.PickleCodec()
+        self._publisher.shutdown()
+        self._consumer.shutdown()
+        self._publisher.join()
+        self._consumer.join()
 
     # def _on_response(self, channel, method, properties, body):
     def _on_response(self, message):
@@ -280,7 +347,7 @@ class Client(object):
             log.error('FIXME: This should not happen.')
             return
         try:
-            exception, result = self.codec.decode(message.body)
+            exception, result = self._consumer.get_codec().decode(message.body)
             if exception:
                 exception = RemoteException(exception)
         except Exception as e:  # pragma: no cover
@@ -296,20 +363,12 @@ class Client(object):
         Serialize & publish method call request.
         """
         # self._wait_for_ready()
-        corr_id = str(uuid.uuid4())
+        queued_request = QueuedInvocation(self._consumer.get_codec(), service, method, args, kwargs)
 
         future_result = FutureResult('{}.{}'.format(service, method))
-        self.future_results[corr_id] = future_result
+        self.future_results[queued_request.correlation_id] = future_result
 
-        self._out_queue.put(dict(
-            type='invoke',
-            service=service,
-            method=method,
-            args=args,
-            kwargs=kwargs,
-            corr_id=corr_id,
-            codec=self.codec
-        ))
+        self._publisher.enqueue(queued_request)
 
         return future_result
 
@@ -318,15 +377,9 @@ class Client(object):
         Serialize & publish notification.
         """
         # self._wait_for_ready()
-        corr_id = str(uuid.uuid4())
+        queued_request = QueuedNotification(self._consumer.get_codec(), event, data)
 
-        self._out_queue.put(dict(
-            type='notify',
-            event=event,
-            data=data,
-            corr_id=corr_id,
-            codec=self.codec
-        ))
+        self._publisher.enqueue(queued_request)
 
     def invoke(self, service, method, *args, **kwargs):
         """
@@ -336,7 +389,7 @@ class Client(object):
 
         future_result = self.invoke_async(service, method, *args, **kwargs)
 
-        future_result.wait(self.invoke_timeout)
+        future_result.wait(self._invoke_timeout)
 
         if future_result.exception:
             raise future_result.exception
@@ -347,7 +400,7 @@ class Client(object):
         """
         Sets timeout for waiting for results on this client.
         """
-        self.invoke_timeout = timeout
+        self._invoke_timeout = timeout
 
     def __getattr__(self, attr):
         """
