@@ -74,6 +74,9 @@ class FutureResult(object):
 
 
 class QueuedRequest(object):
+    """
+    Internal class. Represents pending outgoing message.
+    """
     def __init__(self, codec, **kwargs):
         self.codec = codec
         self.correlation_id = str(uuid.uuid4())
@@ -81,6 +84,9 @@ class QueuedRequest(object):
 
 
 class QueuedInvocation(QueuedRequest):
+    """
+    Internal class. Represents pending outgoing method call.
+    """
     def __init__(self, codec, service, method, args, kwargs):
         super(QueuedInvocation, self).__init__(
             codec,
@@ -92,6 +98,9 @@ class QueuedInvocation(QueuedRequest):
 
 
 class QueuedNotification(QueuedRequest):
+    """
+    Internal class. Represents pending outgoing notification.
+    """
     def __init__(self, codec, event, data):
         super(QueuedNotification, self).__init__(
             codec,
@@ -101,6 +110,10 @@ class QueuedNotification(QueuedRequest):
 
 
 class ConsumerThread(Thread):
+    """
+    Internal class. Represents connection & message consuming thread.
+    """
+
     def __init__(self, hostname, exchange_name, connect_timeout, reconnect_timeout, codec):
         super(ConsumerThread, self).__init__()
 
@@ -234,6 +247,10 @@ class ConsumerThread(Thread):
 
 
 class PublisherThread(Thread):
+    """
+    Internal class. Represents message publishing thread.
+    """
+
     def __init__(self, consumer):
         self.consumer = proxy(consumer)
         super(PublisherThread, self).__init__()
@@ -259,6 +276,7 @@ class PublisherThread(Thread):
         self._out_queue.put(queued_request)
 
     def _dispatch_request(self, queued_request, producer):
+        # TODO: Re-enqueue on failure?
         if isinstance(queued_request, QueuedInvocation):
             log.debug('Publishing queued method invocation')
             producer.publish(
@@ -316,7 +334,7 @@ class Client(object):
 
     def start(self):
         """
-        Connect to broker and create a callback queue with "exclusive" flag.
+        Start connection & publisher threads.
         """
         self._consumer.start()
         self._publisher.start()
@@ -325,22 +343,15 @@ class Client(object):
         """
         Stops the client and waits for its termination.
         """
-        # self._is_running = False
-        # if self.conn is not None:
-        #     self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
-        # self._thread.join()
         self._publisher.shutdown()
         self._consumer.shutdown()
         self._publisher.join()
         self._consumer.join()
 
-    # def _on_response(self, channel, method, properties, body):
     def _on_response(self, message):
         """
         Called when a message is consumed.
         """
-        # print('RESPONSE', message.body)
-        # print('RESPONSE', message.properties.correlation_id)
         future_result = self.future_results.get(message.properties['correlation_id'], None)
         if not future_result:  # pragma: no cover
             # TODO: Should not happen!
@@ -362,7 +373,6 @@ class Client(object):
         """
         Serialize & publish method call request.
         """
-        # self._wait_for_ready()
         queued_request = QueuedInvocation(self._consumer.get_codec(), service, method, args, kwargs)
 
         future_result = FutureResult('{}.{}'.format(service, method))
@@ -376,7 +386,6 @@ class Client(object):
         """
         Serialize & publish notification.
         """
-        # self._wait_for_ready()
         queued_request = QueuedNotification(self._consumer.get_codec(), event, data)
 
         self._publisher.enqueue(queued_request)
@@ -386,7 +395,6 @@ class Client(object):
         Call a remote method and wait for a result.
         Blocks until a result is ready.
         """
-
         future_result = self.invoke_async(service, method, *args, **kwargs)
 
         future_result.wait(self._invoke_timeout)
