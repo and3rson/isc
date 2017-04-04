@@ -10,7 +10,9 @@ client.start()
 
 client.set_invoke_timeout(10)
 
-assert client.invoke('example', 'add', 2, 3) == 5
+assert client.invoke('example', 'add', 1, 2) == 3
+import time; time.sleep(5)
+assert client.invoke('example', 'add', 3, 4) == 7
 # print('CORRECT!')
 #import time; time.sleep(1)
 # assert client.example.add(2, 3) == 5

@@ -215,7 +215,7 @@ class ConsumerThread(Thread):
         consumer = kombu.Consumer(
             self._conn,
             queues=[self._callback_queue],
-            on_message=self.on_message.fire,
+            on_message=self._on_message,
             accept=[self._codec.content_type]
         )
 
@@ -226,6 +226,12 @@ class ConsumerThread(Thread):
                 self._conn.drain_events(timeout=0.5)
             except socket.timeout:
                 continue
+
+    def _on_message(self, message):
+        log.debug('Got response for ..{}'.format(
+            str(message.properties['correlation_id'])[-4:]
+        ))
+        self.on_message.fire(message)
 
     def is_connected(self):
         return self._is_connected
@@ -265,7 +271,14 @@ class PublisherThread(Thread):
                 try:
                     queued_request = self._out_queue.get(timeout=0.5)
                     with kombu.producers[self.consumer.get_connection()].acquire(block=True) as producer:
-                        self._dispatch_request(queued_request, producer)
+                        try:
+                            self._dispatch_request(queued_request, producer)
+                        except Exception as e:
+                            # except ConnectionResetError:
+                            log.debug('Failed to dispatch request, re-enqueueing again, error was: {}'.format(
+                                str(e)
+                            ))
+                            self.enqueue(queued_request)
                 except Empty:
                     continue
             else:
@@ -276,9 +289,10 @@ class PublisherThread(Thread):
         self._out_queue.put(queued_request)
 
     def _dispatch_request(self, queued_request, producer):
-        # TODO: Re-enqueue on failure?
         if isinstance(queued_request, QueuedInvocation):
-            log.debug('Publishing queued method invocation')
+            log.debug('Publishing invocation ..{}'.format(
+                queued_request.correlation_id[-4:]
+            ))
             producer.publish(
                 exchange=self.consumer.get_exchange(),
                 routing_key='{}_service_{}'.format(
@@ -295,7 +309,9 @@ class PublisherThread(Thread):
                 content_type=self.consumer.get_codec().content_type,
             )
         else:
-            log.debug('Publishing queued fanout notification')
+            log.debug('Publishing notification ..{}'.format(
+                queued_request.correlation_id[-4:]
+            ))
             producer.publish(
                 exchange='{}_fanout'.format(
                     self.consumer.get_exchange().name
@@ -318,7 +334,7 @@ class Client(object):
     Represents a single low-level connection to the ISC messaging broker.
     Thread-safe.
     """
-    def __init__(self, host='amqp://guest:guest@127.0.0.1:5672/', exchange='isc', codec=None, connect_timeout=2, reconnect_timeout=1, invoke_timeout=10):
+    def __init__(self, host='amqp://guest:guest@127.0.0.1:5672/', exchange='isc', codec=None, connect_timeout=2, reconnect_timeout=3, invoke_timeout=20):
         self.future_results = {}
 
         self._invoke_timeout = invoke_timeout
