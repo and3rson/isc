@@ -1,13 +1,11 @@
 import pika
 import traceback
 import sys
-from threading import Event
+from threading import Thread, Event
 
 from isc import codecs, log
 
-from gevent import sleep
-from gevent import monkey, spawn, spawn_later
-monkey.patch_all()
+from time import sleep
 
 
 class Node(object):
@@ -122,7 +120,19 @@ class Node(object):
         """
         Schedules a job to be executed after requested timeout.
         """
-        spawn_later(timeout, self._run_scheduled_with_local_timer, fn, timeout)
+        Thread(
+            target=self._wait_and_run,
+            args=(
+                timeout,
+                self._run_scheduled_with_local_timer,
+                (fn, timeout),
+                {}
+            )
+        ).start()
+
+    def _wait_and_run(self, interval, fn, args, kwargs):
+        sleep(interval)
+        fn(*args, **kwargs)
 
     def _create_service_queues(self, channel, services):
         """
@@ -169,7 +179,7 @@ class Node(object):
         """
         Called when a message is received on one of the queues.
         """
-        spawn(self._validate_message, channel, method, properties, body)
+        Thread(target=self._validate_message, args=(channel, method, properties, body)).start()
 
     def _validate_message(self, channel, method, properties, body):
         """
@@ -186,11 +196,18 @@ class Node(object):
 
         # service = self.services[service_name]
         try:
+            log.debug('Got invocation ..{}'.format(
+                str(properties.correlation_id)[-4:]
+            ))
             requested_codec, (fn_name, args, kwargs) = self._decode_message(properties, body)
         except Exception as e:
             log.error(str(e))
         else:
             result = self._call_service_method((service_name, fn_name), args, kwargs)
+
+            log.debug('Publishing response for invocation ..{}'.format(
+                str(properties.correlation_id)[-4:]
+            ))
 
             channel.basic_publish(exchange=self.exchange, routing_key=properties.reply_to, properties=pika.BasicProperties(
                 correlation_id=properties.correlation_id
@@ -229,7 +246,13 @@ class Node(object):
                 fn = info
             self._fire_hook('pre_call', fn_name, args, kwargs)
             result = (None, fn(*args, **kwargs))
-            log.debug('{}(*{}, **{})'.format(fn_name, args, kwargs))
+
+            args_str = ', '.join(map(str, args))
+            kwargs_str = ', '.join(['{}={}'.format(k, v) for k, v in kwargs.items()])
+
+            args_kwargs_str = ', '.join((args_str, kwargs_str))
+
+            log.debug('{}({})'.format(fn_name, args_kwargs_str))
             self._fire_hook('post_success', fn_name, args, kwargs, result)
             return result
         except Exception as e:
@@ -278,9 +301,13 @@ class Node(object):
         except Exception as e:
             log.error(str(e))
         else:
+            log.debug('Got notification ..{}'.format(
+                str(properties.correlation_id)[-4:]
+            ))
+
             listeners = self.listeners.get(event, [])
             for fn in listeners:
-                spawn(fn, data)
+                Thread(target=fn, args=(data,)).start()
 
     def _fire_hook(self, name, *args, **kwargs):
         """

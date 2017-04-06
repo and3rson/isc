@@ -6,15 +6,15 @@ from setuptools import setup
 
 setup(
     name='isclib',
-    version='0.18',
-    description='ISC: Inter-service communication layer for Python.',
+    version='0.19',
+    description='ISC: Inter-service communication layer for Python. Compatible with gevent.',
     author="Andrew Dunai",
     author_email='andrew@dun.ai',
     url='https://github.com/and3rson/isc',
     license='GPLv3',
     packages=['isc'],
     include_package_data=True,
-    install_requires=['setuptools', 'gevent', 'pika', 'kombu'],
+    install_requires=['setuptools', 'pika', 'kombu'],
     zip_safe=False,
     classifiers=[
         'Development Status :: 5 - Production/Stable',

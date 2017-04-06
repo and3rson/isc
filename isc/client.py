@@ -228,7 +228,7 @@ class ConsumerThread(Thread):
                 continue
 
     def _on_message(self, message):
-        log.debug('Got response for ..{}'.format(
+        log.debug('Got response for invocation ..{}'.format(
             str(message.properties['correlation_id'])[-4:]
         ))
         self.on_message.fire(message)
@@ -236,7 +236,7 @@ class ConsumerThread(Thread):
     def is_connected(self):
         return self._is_connected
 
-    def shutdown(self):
+    def shutdown_worker(self):
         self._is_running = False
 
     def get_connection(self):
@@ -325,7 +325,7 @@ class PublisherThread(Thread):
                 content_type=self.consumer.get_codec().content_type
             )
 
-    def shutdown(self):
+    def shutdown_worker(self):
         self._is_running = False
 
 
@@ -359,8 +359,8 @@ class Client(object):
         """
         Stops the client and waits for its termination.
         """
-        self._publisher.shutdown()
-        self._consumer.shutdown()
+        self._publisher.shutdown_worker()
+        self._consumer.shutdown_worker()
         self._publisher.join()
         self._consumer.join()
 

@@ -4,13 +4,13 @@ try:  # pragma: no cover
 except ImportError:  # pragma: no cover
     import mock
 from time import sleep
-from gevent import spawn
-from gevent.event import Event
+# from gevent import spawn
+# from gevent.event import Event
 from time import time
 from .server import Node, expose, on, local_timer, log
 from .client import Client, RemoteException, TimeoutException, FutureResult
 from .codecs import JSONCodec
-from threading import Thread
+from threading import Thread, Event
 
 
 class ExampleService(object):
@@ -52,7 +52,9 @@ class GenericTest(TestCase):
         self.node = Node(exchange='isc-unittest')
         self.service = ExampleService()
         self.node.register_service(self.service)
-        self.node_greenlet = spawn(self.node.run)
+        self.node_thread = Thread(target=self.node.run)
+        self.node_thread.daemon = True
+        self.node_thread.start()
         self.node.wait_for_ready()
         self.client = Client(exchange='isc-unittest')
         self.client.start()
@@ -61,7 +63,7 @@ class GenericTest(TestCase):
     def tearDown(self):
         self.client.stop()
         self.node.stop()
-        self.node_greenlet.join()
+        # self.node_thread.join()
         for client in self.clients:
             client.stop()
 

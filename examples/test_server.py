@@ -12,7 +12,8 @@ class ExampleService(object):
         self.tracker = None
 
     @expose
-    def add(self, a, b):
+    def add(self, a, b, wait=0):
+        sleep(wait)
         return a + b
 
     @expose

@@ -10,11 +10,18 @@ client.start()
 
 client.set_invoke_timeout(10)
 
-assert client.invoke('example', 'add', 1, 2) == 3
+future1 = client.example.add.call_async(1, 2, wait=5)
 # import time; time.sleep(5)
-assert client.invoke('example', 'add', 3, 4) == 7
+future2 = client.example.add.call_async(3, 4, wait=3)
 # print('CORRECT!')
-#import time; time.sleep(1)
+# import time; time.sleep(1)
 # assert client.example.add(2, 3) == 5
+
+print('Now wait...')
+
+future2.wait()
+assert future2.value == 7
+future1.wait()
+assert future1.value == 3
 
 client.stop()
