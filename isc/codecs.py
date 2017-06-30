@@ -37,7 +37,7 @@ class PickleCodec(AbstractCodec):
     content_type = 'pickle'
 
     def encode(self, message):
-        return pickle.dumps(message)
+        return pickle.dumps(message, protocol=2)
 
     def decode(self, payload):
         return pickle.loads(payload)

@@ -63,7 +63,7 @@ class GenericTest(TestCase):
     def tearDown(self):
         self.client.stop()
         self.node.stop()
-        # self.node_thread.join()
+        self.node_thread.join()
         for client in self.clients:
             client.stop()
 
