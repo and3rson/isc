@@ -12,10 +12,10 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         assert getattr(settings, 'ISC', None), 'ISC config not present in settings'
-        assert 'hostname' in settings.ISC, 'hostname not provided in ISC config'
+        assert 'url' in settings.ISC, 'connection URL not provided in ISC config'
         assert 'services' in settings.ISC, 'services not provided in ISC config'
 
-        node = Node(hostname=settings.ISC['hostname'])
+        node = Node(url=settings.ISC['url'])
 
         for service_import_string in settings.ISC['services']:
             service_class = self._import_object(service_import_string)
