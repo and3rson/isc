@@ -13,14 +13,17 @@ class Node(object):
     Registers services & listens to AMQP for RPC calls & notifications.
     """
 
-    def __init__(self, hostname='127.0.0.1', exchange='isc'):
+    def __init__(self, hostname='127.0.0.1', url=None, exchange='isc'):
         self.exchange = exchange
         self._infix = '_service_'
         self.queue_name_offset = len(exchange) + len(self._infix)
         self.services = {}
         self.listeners = {}
         self._is_ready = Event()
-        self.params = pika.ConnectionParameters(hostname)
+        if url is None:
+            self.params = pika.ConnectionParameters(hostname)
+        else:
+            self.params = pika.URLParameters(url)
         self._is_running = False
         self.codecs = {}
         self.register_codec(codecs.PickleCodec())
