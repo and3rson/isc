@@ -427,6 +427,12 @@ class Client(object):
         """
         self._invoke_timeout = timeout
 
+    def set_logging_level(self, level):
+        """
+        Set logging level.
+        """
+        log.set_level(level)
+
     def __getattr__(self, attr):
         """
         Convenience method.

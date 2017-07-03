@@ -316,6 +316,12 @@ class Node(object):
         for hook in self.hooks[name]:
             hook(*args, **kwargs)
 
+    def set_logging_level(self, level):
+        """
+        Set logging level.
+        """
+        log.set_level(level)
+
 
 def expose(fn):
     """

@@ -3,6 +3,7 @@
 from isc.server import Node, expose, on, local_timer
 from time import sleep
 from pympler import tracker
+import logging
 
 
 class ExampleService(object):
@@ -46,6 +47,7 @@ class ExampleService(object):
 
 service = ExampleService()
 node = Node(exchange='isctest')
+node.set_logging_level(logging.INFO)
 node.register_service(service)
 
 if __name__ == '__main__':

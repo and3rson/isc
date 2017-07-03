@@ -1,8 +1,8 @@
 import logging
 # import coloredlogs
 
-LEVEL = logging.DEBUG
-# LEVEL = logging.INFO
+# LEVEL = logging.DEBUG
+LEVEL = logging.INFO
 
 FORMAT = '%(asctime)-15s : %(levelname)-8s : %(message)s'
 logging.basicConfig(format=FORMAT)
@@ -21,3 +21,6 @@ info = logger.info
 warning = logger.warning
 warn = logger.warn
 error = logger.error
+
+def set_level(level):
+    logger.level = level
