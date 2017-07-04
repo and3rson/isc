@@ -2,6 +2,7 @@ from django.core.management import BaseCommand
 from django.conf import settings
 from isc.server import Node
 from importlib import import_module
+import logging
 
 
 class Command(BaseCommand):
@@ -24,5 +25,9 @@ class Command(BaseCommand):
         for hook_name, hook_import_string in settings.ISC.get('hooks', {}).items():
             hook_function = self._import_object(hook_import_string)
             node.add_hook(hook_name)(hook_function)
+
+        if 'logging_level' in settings.ISC:
+            level = getattr(logging, settings.ISC['logging_level'])
+            node.set_logging_level(level)
 
         node.run()
