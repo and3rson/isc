@@ -250,8 +250,8 @@ class Node(object):
             self._fire_hook('pre_call', fn_name, args, kwargs)
             result = (None, fn(*args, **kwargs))
 
-            args_str = ', '.join(map(str, args))
-            kwargs_str = ', '.join(['{}={}'.format(k, v) for k, v in kwargs.items()])
+            args_str = ', '.join(map(repr, args))
+            kwargs_str = ', '.join(['{}={}'.format(k, repr(v)) for k, v in kwargs.items()])
 
             args_kwargs_str = ', '.join((args_str, kwargs_str))
 
