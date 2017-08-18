@@ -433,6 +433,18 @@ class Client(object):
         """
         log.set_level(level)
 
+    def set_codec(self, codec):
+        """
+        Set codec.
+        """
+        self._consumer._codec = codec
+
+    def force_json(self):
+        """
+        Force to use JSON codec only.
+        """
+        self._consumer._codec = codecs.JSONCodec()
+
     def __getattr__(self, attr):
         """
         Convenience method.
