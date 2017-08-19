@@ -7,34 +7,45 @@ except:
 
 
 class FakeInvocationProxy(object):
-    def __init__(self, service, method, fn):
-        self.service = service
-        self.method = method
-        self.fn = fn
+    def __init__(self, definitions):
+        self.definitions = definitions
 
-    def __call__(self, *args, **kwargs):
-        future = FutureResult('{}.{}'.format(self.service, self.method))
+    def __call__(self, service, method, *args, **kwargs):
+        def_key = '{}.{}'.format(service, method)
+        assert def_key in self.definitions, 'Your code tried to call "{}" which is not present in `patch_isc` definition.'.format(
+            def_key
+        )
+        def_value = self.definitions[def_key]
+        print('FakeInvocationProxy: calling {}.{}(*{}, **{})'.format(
+            service,
+            method,
+            repr(args),
+            repr(kwargs)
+        ))
+        future = FutureResult('{}.{}'.format(service, method))
         try:
-            if callable(self.fn):
-                result = self.fn(*args, **kwargs)
+            if callable(def_value):
+                result = def_value(*args, **kwargs)
             else:
-                result = self.fn
+                result = def_value
             future.resolve(result)
         except Exception as e:
             future.reject(RemoteException(str(e)))
         return future
 
 
-def patch_isc(service, method, side_effect):
+def patch_isc(definitions):
     """
-    Patch ISC return for specifict method.
-    side_effect can be callable or value.
+    Patch ISC return for specified methods.
+    `definitions` should be a dictionary where each key
+    is a string in "service.method" form and each value
+    is a predefined return value or a callable.
     """
     def decorator(fn):
         def wrapper(*args, **kwargs):
             with patch(
                 'isc.client.Client.invoke_async',
-                side_effect=FakeInvocationProxy(service, method, side_effect)
+                side_effect=FakeInvocationProxy(definitions)
             ):
                 return fn(*args, **kwargs)
         return wrapper
