@@ -144,7 +144,8 @@ class Node(object):
         channel.exchange_declare(exchange=self.exchange)
         for service in services.values():
             queue = '{}_service_{}'.format(self.exchange, service.name)
-            channel.queue_declare(queue=queue)  # TODO: Add auto_delete=True
+            channel.queue_delete(queue=queue)
+            channel.queue_declare(queue=queue, auto_delete=True)
             channel.queue_bind(queue, self.exchange)
             channel.basic_consume(self._on_message, queue=queue, no_ack=False)
 
