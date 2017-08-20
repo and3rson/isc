@@ -128,6 +128,7 @@ class ConsumerThread(Thread):
         self.on_error = EventHook()
         self.on_disconnect = EventHook()
         self.on_message = EventHook()
+        self.on_return = EventHook()
 
         self._connect_timeout = connect_timeout
         self._reconnect_timeout = reconnect_timeout
@@ -234,6 +235,9 @@ class ConsumerThread(Thread):
         ))
         self.on_message.fire(message)
 
+    def _handle_return(self, exception, exchange, routing_key, message):
+        self.on_return.fire(exception, message)
+
     def is_connected(self):
         return self._is_connected
 
@@ -269,9 +273,12 @@ class PublisherThread(Thread):
         self._is_running = True
         while self._is_running:
             if self.consumer.is_connected():
+                producer = kombu.Producer(self.consumer._channel, on_return=self.consumer._handle_return)
                 try:
                     queued_request = self._out_queue.get(timeout=0.5)
-                    with kombu.producers[self.consumer.get_connection()].acquire(block=True) as producer:
+                    if True:
+                    # with kombu.producers[self.consumer.get_connection()].acquire(block=True) as producer:
+                        # producer.on_return = print
                         try:
                             self._dispatch_request(queued_request, producer)
                         except Exception as e:
@@ -305,6 +312,7 @@ class PublisherThread(Thread):
                     queued_request.args,
                     queued_request.kwargs
                 )),
+                mandatory=True,
                 reply_to=self.consumer.get_callback_queue().name,
                 correlation_id=queued_request.correlation_id,
                 content_type=self.consumer.get_codec().content_type,
@@ -344,6 +352,7 @@ class Client(object):
         self._publisher = PublisherThread(self._consumer)
 
         self._consumer.on_message += self._on_response
+        self._consumer.on_return += self._on_return
 
         self.on_connect = self._consumer.on_connect
         self.on_error = self._consumer.on_error
@@ -385,6 +394,14 @@ class Client(object):
             future_result.reject(exception)
         else:
             future_result.resolve(result)
+
+    def _on_return(self, exception, message):
+        future_result = self.future_results.get(message.properties['correlation_id'], None)
+        if not future_result:  # pragma: no cover
+            # TODO: Should not happen!
+            log.error('FIXME: This should not happen.')
+            return
+        future_result.reject(RemoteException(exception))
 
     def invoke_async(self, service, method, *args, **kwargs):
         """
