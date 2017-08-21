@@ -128,7 +128,7 @@ Using ISC with Django is very simple.
 
 In order to integrate ISC into your Django app, you need to perform those steps:
 
-1. Clasically, add `isc` to `INSTALLED_APPS`.
+1. Classically, add `isc` to `INSTALLED_APPS`.
 
 2. Add configuration for your services into your `settings.py`:
 
