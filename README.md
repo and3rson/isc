@@ -29,7 +29,7 @@ And of course they can communicate with your Django apps because they share the 
 1. You declare some services which are basically just classes with exposed methods.
 2. *[Not required for Django]* You instantiate & register your services.
 3. You run the worker that handles incoming requests and delivers function return values back to the caller (Classic RPC pattern.) For Django this is achieved by running `./manage.py isc`.
-4. [Django only] You can also start your web server with `runserver` and it will work as if nothing happened: the worker works in one process and the Django itself works in the other one. Because `isc` is a Django management command, you can easily use all of Django's fascilities in your ISC services: ORM, templating etc. You can even send RPC calls from one services to the others.
+4. [Django only] Apart from having the `isc` running, you'll now want to also start your web server with `./manage.py runserver` in a different terminal. Now you have 2 processes running: 1 for Django itself and 1 for ISC worker that will perform tasks asynchronously. Because `isc` is a Django management command, you can easily use all of Django's fascilities in your ISC services: ORM, templating etc. You can even send RPC calls from one services to the others.
 
 # Dependencies
 
@@ -114,6 +114,12 @@ client.notify('boom', dict(place='old_building'))
 
 # Raises RemoteException
 client.private_method()
+
+# Do not wait for result
+future = client.example.foo.call_async()
+# ...or if you want, you can manually wait for it:
+future.wait()
+print(future.value)
 ```
 
 # Playing with Django
