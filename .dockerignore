@@ -1,0 +1,12 @@
+.env
+.env2
+dist
+.cache
+.git
+__pycache__
+*.pyc
+*.pyo
+**/__pycache__
+**/*.pyc
+**/*.pyo
+

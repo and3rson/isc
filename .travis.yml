@@ -1,11 +1,22 @@
-language: python
-python:
-  - "2.7"
-  - "3.6"
+env:
+  - DOCKER_COMPOSE_VERSION=1.14.0
+
+sudo: required
+
 services:
-  - rabbitmq
-install:
-  - pip install -r requirements/build.txt
-script: make test
-after_success:
-  - coveralls
+  - docker
+
+language: python
+
+before_install:
+  - sudo rm /usr/local/bin/docker-compose
+  - curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-`uname -s`-`uname -m` > docker-compose
+  - chmod +x docker-compose
+  - sudo mv docker-compose /usr/local/bin
+
+install: docker-compose build
+script: docker-compose up --abort-on-container-exit --exit-code-from app
+
+#after_success:
+  #- coveralls
+

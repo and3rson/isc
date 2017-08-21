@@ -1,3 +1,4 @@
+import os
 from unittest import TestCase
 try:  # pragma: no cover
     from unittest import mock
@@ -11,6 +12,8 @@ from .server import Node, expose, on, local_timer, log
 from .client import Client, RemoteException, TimeoutException, FutureResult
 from .codecs import JSONCodec
 from threading import Thread, Event
+
+os.environ.setdefault('RABBITMQ_HOST', 'amqp://guest:guest@127.0.0.1:5672')
 
 
 class ExampleService(object):
@@ -49,16 +52,17 @@ class ExampleService(object):
 
 class GenericTest(TestCase):
     def setUp(self):
-        self.node = Node(exchange='isc-unittest')
+        self.node = Node(url=os.getenv('RABBITMQ_HOST'), exchange='isc-unittest')
         self.service = ExampleService()
         self.node.register_service(self.service)
         self.node_thread = Thread(target=self.node.run)
         self.node_thread.daemon = True
         self.node_thread.start()
         self.node.wait_for_ready()
-        self.client = Client(exchange='isc-unittest')
+        self.client = Client(os.getenv('RABBITMQ_HOST'), exchange='isc-unittest')
         self.client.start()
         self.clients = []
+        print('d')
 
     def tearDown(self):
         self.client.stop()
@@ -113,7 +117,7 @@ class GenericTest(TestCase):
         self.assertRaises(Exception, self.node.register_service, self.service)
 
     def test_reconnect_and_redeliver(self):
-        client = Client(host='amqp://127.0.0.1:55553', exchange='isc-unittest')
+        client = Client('amqp://127.0.0.1:55553', exchange='isc-unittest')
         client.start()
         self.clients.append(client)
 
@@ -123,7 +127,7 @@ class GenericTest(TestCase):
         client.on_error += error_event.set
         self.assertTrue(error_event.wait(5))
 
-        client._consumer._hostname = 'amqp://127.0.0.1:5672'
+        client._consumer._hostname = os.getenv('RABBITMQ_HOST')
 
         connect_event = Event()
         client.on_connect += connect_event.set
@@ -180,7 +184,7 @@ class GenericTest(TestCase):
         self.assertEqual(self.client.example.add((2,), (3,)), (2, 3), 'When using pickle codec, tuple should not be downgraded to list.')
 
     def test_json_codec(self):
-        client = Client(codec=JSONCodec(), exchange='isc-unittest')
+        client = Client(os.getenv('RABBITMQ_HOST'), codec=JSONCodec(), exchange='isc-unittest')
         client.start()
         self.clients.append(client)
         self.assertEqual(client.example.add((2,), (3,)), [2, 3], 'When using JSON codec, tuple should be downgraded to list.')
@@ -202,7 +206,7 @@ class GenericTest(TestCase):
         self.assertTrue(error_event.wait(3))
 
     def test_eventhook(self):
-        client = Client(exchange='isc-unittest')
+        client = Client(os.getenv('RABBITMQ_HOST'), exchange='isc-unittest')
         self.clients.append(client)
 
         event = Event()
