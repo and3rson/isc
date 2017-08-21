@@ -6,7 +6,7 @@ from setuptools import setup
 
 setup(
     name='isclib',
-    version='0.37',
+    version='0.38',
     description='ISC: Inter-service communication layer for Python. Compatible with gevent.',
     author="Andrew Dunai",
     author_email='andrew@dun.ai',

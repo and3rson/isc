@@ -82,6 +82,8 @@ class TypedJSONCodec(AbstractCodec):
             raise CodecException('Don\'t know how to serialize {}'.format(repr(v)))
 
     def decode(self, payload):
+        if isinstance(payload, bytes):
+            payload = payload.decode('utf-8')
         return json.JSONDecoder(object_hook=self._decode_object).decode(payload)
 
     def _decode_object(self, v):

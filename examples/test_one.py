@@ -1,12 +1,14 @@
 #!/usr/bin/env python3.6
 
 from isc.client import Client
+from isc.codecs import TypedJSONCodec
 
 # import socket
 # socket.setdefaulttimeout(1)
 
 client = Client(host='127.0.0.1', exchange='isctest')
 client.start()
+client.set_codec(TypedJSONCodec())
 
 client.set_invoke_timeout(10)
 
