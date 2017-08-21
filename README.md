@@ -18,7 +18,7 @@ ISC supports Django and makes it easy and intuitive to build a distributed syste
 
 - **Distribution.** Service is an application (Python, Django, Flask or whatever) that performs a set of tasks, and performs them well.
 - **Encapsulation.** If service needs to perform the work that the other service is responsible for, it should ask the other service to do so.
-- **Abstraction.** All services are clients, irregardlessly of whether they provide functions or request others to perform functions. Service doesn't need to know the address of the. Services can also broadcast messages to multiple other services.
+- **Abstraction.** All services are clients, irregardlessly of whether they provide functions or perform RPC calls to other services. Service doesn't need to know the address or specifications of each other. Services can also broadcast messages to multiple other services.
 
 # Psst: You can also write some of your [services in NodeJS](https://www.npmjs.com/package/isclib)!
 
