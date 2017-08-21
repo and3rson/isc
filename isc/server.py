@@ -28,6 +28,7 @@ class Node(object):
         self.codecs = {}
         self.register_codec(codecs.PickleCodec())
         self.register_codec(codecs.JSONCodec())
+        self.register_codec(codecs.TypedJSONCodec())
         self.hooks = {
             'pre_call': set(),
             'post_success': set(),
