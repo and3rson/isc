@@ -14,7 +14,7 @@ It uses RabbitMQ as messaging broker and is compatible with gevent monkey patchi
 
 ISC supports Django and makes it easy and intuitive to build a distributed system using. We're trying to make you capable of walking away from the monolythic architecture of typical Django apps.
 
-!! # The philosophy
+# The philosophy
 
 - **Distribution.** Service is an application (Python, Django, Flask or whatever) that performs a set of tasks, and performs them well.
 - **Encapsulation.** If service needs to perform the work that the other service is responsible for, it should ask the other service to do so.
