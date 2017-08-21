@@ -217,7 +217,7 @@ class ConsumerThread(Thread):
             self._conn,
             queues=[self._callback_queue],
             on_message=self._on_message,
-            accept=[self._codec.content_type],
+            # accept=[self._codec.content_type],
             no_ack=True
         )
 
