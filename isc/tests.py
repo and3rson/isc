@@ -87,8 +87,13 @@ class GenericTest(TestCase):
         # self.assertRaises(RemoteException, self.client.unexisting_service.add, (2, 3))
 
     def test_unexisting_service(self):
-        self.client.set_invoke_timeout(1)
-        self.assertRaises(TimeoutException, self.client.unexisting_service.some_method)
+        # self.client.set_invoke_timeout(1)
+        try:
+            result = self.client.unexisting_service.some_method()
+        except RemoteException as e:
+            self.assertIn('Could not find route', str(e))
+        else:
+            raise AssertionError('Expected RemoteException. Disappointed.')
 
     def test_raises_exception(self):
         self.assertRaises(RemoteException, self.client.example.raise_error)
