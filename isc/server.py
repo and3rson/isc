@@ -165,7 +165,7 @@ class Node(object):
         """
         Creates a fanout queue to accept notifications.
         """
-        channel.exchange_declare(exchange='{}_fanout'.format(self.exchange), type='fanout')
+        channel.exchange_declare(exchange='{}_fanout'.format(self.exchange), exchange_type='fanout')
         fanout_queue = channel.queue_declare(exclusive=True)
         channel.queue_bind(exchange='{}_fanout'.format(self.exchange), queue=fanout_queue.method.queue)
 
