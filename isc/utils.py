@@ -1,3 +1,5 @@
+from functools import wraps
+
 from isc.client import FutureResult, RemoteException
 
 try:
@@ -42,6 +44,7 @@ def patch_isc(definitions):
     is a predefined return value or a callable.
     """
     def decorator(fn):
+        @wraps(fn)
         def wrapper(*args, **kwargs):
             with patch(
                 'isc.client.Client.invoke_async',
