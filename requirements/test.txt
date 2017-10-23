@@ -14,4 +14,5 @@ py==1.4.32
 pyparsing==2.1.10
 six==1.10.0
 python-dateutil==2.6.1
+flake8==3.5.0
 
