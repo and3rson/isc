@@ -148,7 +148,9 @@ ISC = {
     # 'hooks': {
     #     'post_success': 'myapp.utils.handle_success'
     #     'post_error': 'myapp.utils.handle_error',
-    # }
+    # },
+    # Size of worker thread pool for server
+    # 'thread_pool_size': 8
 }
 ```
 
