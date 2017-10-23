@@ -4,7 +4,7 @@ MAINTAINER Andrew Dunai
 # Enable edge repo
 RUN sed -i -e 's/v3\.\d/edge/g' /etc/apk/repositories
 
-RUN apk add --update py3-gevent
+RUN apk add --update py-gevent
 RUN mkdir /home/isc
 
 COPY ./requirements /home/isc/requirements
