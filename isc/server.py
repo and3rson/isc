@@ -1,7 +1,13 @@
+from functools import partial
 import pika
 import traceback
 import sys
+try:
+    from inspect import signature
+except:
+    signature = None
 from threading import Thread, Event
+from multiprocessing.pool import ThreadPool
 
 from isc import codecs, log
 
@@ -13,7 +19,11 @@ class Node(object):
     Registers services & listens to AMQP for RPC calls & notifications.
     """
 
-    def __init__(self, hostname='127.0.0.1', url=None, exchange='isc'):
+    SPECIAL_METHODS = [
+        '_inspect'
+    ]
+
+    def __init__(self, hostname='127.0.0.1', url=None, exchange='isc', thread_pool_size=8):
         self.exchange = exchange
         self._infix = '_service_'
         self.queue_name_offset = len(exchange) + len(self._infix)
@@ -34,6 +44,29 @@ class Node(object):
             'post_success': set(),
             'post_error': set()
         }
+        self.pool = ThreadPool(thread_pool_size)
+
+    def _inspect(self, service):
+        attributes = [(key, getattr(service, key)) for key in dir(service)]
+
+        exposed = [(key, attr) for key, attr in attributes if getattr(attr, '__exposed__', None) is not None]
+        exposed_dict = {
+            key: str(signature(attr)) if signature else None
+            for key, attr
+            in exposed
+        }
+
+        listeners = [(key, attr) for key, attr in attributes if getattr(attr, '__on__', None) is not None]
+        listeners_dict = {
+            key: list(attr.__on__)
+            for key, attr
+            in listeners
+        }
+
+        return dict(
+            exposed=exposed_dict,
+            listeners=listeners_dict
+        )
 
     def run(self):
         """
@@ -165,7 +198,7 @@ class Node(object):
         """
         Creates a fanout queue to accept notifications.
         """
-        channel.exchange_declare(exchange='{}_fanout'.format(self.exchange), exchange_type='fanout')
+        channel.exchange_declare(exchange='{}_fanout'.format(self.exchange), type='fanout')
         fanout_queue = channel.queue_declare(exclusive=True)
         channel.queue_bind(exchange='{}_fanout'.format(self.exchange), queue=fanout_queue.method.queue)
 
@@ -184,7 +217,7 @@ class Node(object):
         """
         Called when a message is received on one of the queues.
         """
-        Thread(target=self._validate_message, args=(channel, method, properties, body)).start()
+        self.pool.apply_async(self._validate_message, args=(channel, method, properties, body))
 
     def _validate_message(self, channel, method, properties, body):
         """
@@ -283,9 +316,12 @@ class Node(object):
         Raises `Exception` on error.
         """
         service = self.services[service_name]
+
         fn = getattr(service, fn_name, None)
 
         if fn is None:
+            if fn_name in self.__class__.SPECIAL_METHODS:
+                return partial(getattr(self, fn_name), service)
             log.warning('No method %s', fn_name)
             raise Exception('Could not find method {}.'.format(fn_name))
 
@@ -312,7 +348,7 @@ class Node(object):
 
             listeners = self.listeners.get(event, [])
             for fn in listeners:
-                Thread(target=fn, args=(data,)).start()
+                self.pool.apply_async(fn, args=(data,))
 
     def _fire_hook(self, name, *args, **kwargs):
         """

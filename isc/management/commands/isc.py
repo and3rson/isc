@@ -16,6 +16,10 @@ class Command(BaseCommand):
         assert 'url' in settings.ISC, 'connection URL not provided in ISC config'
         assert 'services' in settings.ISC, 'services not provided in ISC config'
 
+        kwargs['url'] = settings.ISC['url']
+        if 'thread_pool_size' in settings.ISC:
+            kwargs['thread_pool_size'] = settings.ISC['thread_pool_size']
+
         node = Node(url=settings.ISC['url'])
 
         for service_import_string in settings.ISC['services']:
