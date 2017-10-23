@@ -15,6 +15,7 @@ WORKDIR /home/isc
 RUN \
     python3.6 -m pip install -r ./requirements/test.txt
 
+COPY ./.flake8 /home/isc
 COPY ./pytest.ini /home/isc
 COPY ./isc /home/isc/isc
 

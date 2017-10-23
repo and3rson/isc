@@ -1,11 +1,6 @@
 import sys
 from inspect import signature
 
-try:  # Python 2.x
-    from StringIO import StringIO
-except ImportError:  # Python 3.x
-    from io import StringIO
-
 from django.core.management import BaseCommand
 from django.conf import settings
 from importlib import import_module
@@ -41,7 +36,9 @@ class Command(BaseCommand):
 
     def print_service_info(self, service_string, service, methods):
         service_module, _, service_class = service_string.rpartition('.')
-        sys.stdout.write(Command.GREEN + service_module + '.' + Command.BOLD_GREEN + service_class + Command.RESET + ': ')
+        sys.stdout.write(
+            Command.GREEN + service_module + '.' + Command.BOLD_GREEN + service_class + Command.RESET + ': '
+        )
         sys.stdout.write(Command.BOLD_BLUE + service.name + Command.RESET + '\n')
         for method in methods:
             self.print_method_info(method)

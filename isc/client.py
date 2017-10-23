@@ -281,7 +281,7 @@ class PublisherThread(Thread):
                 try:
                     queued_request = self._out_queue.get(timeout=0.5)
                     if True:
-                    # with kombu.producers[self.consumer.get_connection()].acquire(block=True) as producer:
+                        # with kombu.producers[self.consumer.get_connection()].acquire(block=True) as producer:
                         # producer.on_return = print
                         try:
                             self._dispatch_request(queued_request, producer)
@@ -347,7 +347,15 @@ class Client(object):
     Represents a single low-level connection to the ISC messaging broker.
     Thread-safe.
     """
-    def __init__(self, host='amqp://guest:guest@127.0.0.1:5672/', exchange='isc', codec=None, connect_timeout=2, reconnect_timeout=3, invoke_timeout=20):
+    def __init__(
+        self,
+        host='amqp://guest:guest@127.0.0.1:5672/',
+        exchange='isc',
+        codec=None,
+        connect_timeout=2,
+        reconnect_timeout=3,
+        invoke_timeout=20
+    ):
         self.future_results = {}
 
         self._invoke_timeout = invoke_timeout

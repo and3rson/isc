@@ -247,9 +247,14 @@ class Node(object):
                 str(properties.correlation_id)[-4:]
             ))
 
-            channel.basic_publish(exchange=self.exchange, routing_key=properties.reply_to, properties=pika.BasicProperties(
-                correlation_id=properties.correlation_id
-            ), body=requested_codec.encode(result))
+            channel.basic_publish(
+                exchange=self.exchange,
+                routing_key=properties.reply_to,
+                properties=pika.BasicProperties(
+                    correlation_id=properties.correlation_id
+                ),
+                body=requested_codec.encode(result)
+            )
 
     def _decode_message(self, properties, body):
         """
@@ -308,7 +313,11 @@ class Node(object):
             filename, lineno, _, line = frame
         else:  # pragma: no cover
             filename, lineno, line = frame.filename, frame.lineno, frame.line
-        log.error('Error in RPC method "{}", file {}:{}:\n    {}\n{}: {}'.format(fn_name, filename, lineno, line, e.__class__.__name__, str(e)))
+        log.error(
+            'Error in RPC method "{}", file {}:{}:\n    {}\n{}: {}'.format(
+                fn_name, filename, lineno, line, e.__class__.__name__, str(e)
+            )
+        )
 
     def _get_method(self, service_name, fn_name):
         """

@@ -5,7 +5,7 @@ from isc.client import FutureResult, RemoteException
 try:
     from unittest.mock import patch
 except:
-    import mock
+    from mock import patch
 
 
 class FakeInvocationProxy(object):
@@ -14,9 +14,11 @@ class FakeInvocationProxy(object):
 
     def __call__(self, service, method, *args, **kwargs):
         def_key = '{}.{}'.format(service, method)
-        assert def_key in self.definitions, 'Your code tried to call "{}" which is not present in `patch_isc` definition.'.format(
-            def_key
-        )
+        assert \
+            def_key in self.definitions, \
+            'Your code tried to call "{}" which is not present in `patch_isc` definition.'.format(
+                def_key
+            )
         def_value = self.definitions[def_key]
         print('FakeInvocationProxy: calling {}.{}(*{}, **{})'.format(
             service,

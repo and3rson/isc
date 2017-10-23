@@ -1,13 +1,9 @@
 from unittest import TestCase
-try:  # pragma: no cover
-    from unittest import mock
-except ImportError:  # pragma: no cover
-    import mock
 from time import sleep
 # from gevent import spawn
 # from gevent.event import Event
 from time import time
-from .server import Node, expose, on, local_timer, log
+from .server import Node, expose, on, local_timer
 from .client import Client, RemoteException, TimeoutException, FutureResult
 from .codecs import JSONCodec
 from threading import Thread, Event
@@ -172,13 +168,19 @@ class GenericTest(TestCase):
         self.assertEqual(self.client.example.slow_method(), 42)
 
     def test_pickle_codec(self):
-        self.assertEqual(self.client.example.add((2,), (3,)), (2, 3), 'When using pickle codec, tuple should not be downgraded to list.')
+        self.assertEqual(
+            self.client.example.add((2,), (3,)), (2, 3),
+            'When using pickle codec, tuple should not be downgraded to list.'
+        )
 
     def test_json_codec(self):
         client = Client(codec=JSONCodec(), exchange='isc-unittest')
         client.start()
         self.clients.append(client)
-        self.assertEqual(client.example.add((2,), (3,)), [2, 3], 'When using JSON codec, tuple should be downgraded to list.')
+        self.assertEqual(
+            client.example.add((2,), (3,)), [2, 3],
+            'When using JSON codec, tuple should be downgraded to list.'
+        )
 
     def test_no_reconnect(self):
         client = Client('amqp://127.0.0.1:55553', exchange='unexisting-exchange-this-will-fail', reconnect_timeout=0)

@@ -1,0 +1,45 @@
+[flake8]
+# ignore = D203
+max-line-length=120
+
+ignore =
+    # multiple imports on one line
+    # E401,
+    # module level import not at top of file
+    # E402,
+    # do not assign a lambda expression, use a def
+    # E731,
+    # 'xxx' imported but unused
+    # F401,
+    # 'from xxx import *' used; unable to detect undefined names
+    # F403,
+    # xxx may be undefined, or defined from star imports: xxx
+    # F405,
+    # redefinition of unused 'xxx' from line xxx
+    # F811,
+    # blank line at end of file
+    W391
+
+exclude =
+    docs,
+    examples,
+    # Generated stuff
+    gen,
+    # Coverage HTML report
+    htmlcov,
+    # Logs
+    log,
+    # Requirements
+    requirements,
+    # Temporary stuff
+    tmp,
+    # Virtual envs
+    .env,
+    .env2,
+    .env3,
+    .env36,
+    .venv,
+    .git
+
+# format = \e[31mERROR:\e[0m %(path)s:%(row)d:%(col)d: \e[31m%(code)s\e[0m %(text)s
+# format = \e[36m%(path)s\e[0m:\e[1;33m%(row)d\e[0m:\e[1;32m%(col)d\e[0m: \e[1;31m%(code)s\e[0m %(text)s

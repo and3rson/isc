@@ -1,11 +1,5 @@
 import subprocess
 import sys
-try:
-    # Python 3.x
-    from shutil import which
-except ImportError:
-    # Python 2.x
-    from distutils.spawn import find_executable as which
 
 try:
     from IPython import start_ipython
@@ -13,11 +7,8 @@ try:
 except:
     ipython = False
 
-from isc.client import Client
-
 from django.core.management import BaseCommand
 from django.conf import settings
-from importlib import import_module
 
 
 class Command(BaseCommand):
