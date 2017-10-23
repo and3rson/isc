@@ -14,7 +14,7 @@ before_install:
   - chmod +x docker-compose
   - sudo mv docker-compose /usr/local/bin
 
-install: docker-compose build
+install: docker build -t isc-test .
 script: docker-compose up --abort-on-container-exit --exit-code-from app
 
 #after_success:

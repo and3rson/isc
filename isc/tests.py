@@ -1,3 +1,4 @@
+import os
 from unittest import TestCase
 from time import sleep
 # from gevent import spawn
@@ -7,6 +8,9 @@ from .server import Node, expose, on, local_timer
 from .client import Client, RemoteException, TimeoutException, FutureResult
 from .codecs import JSONCodec
 from threading import Thread, Event
+
+
+RABBITMQ_HOST = os.getenv('RABBITMQ_HOST', 'amqp://guest:guest@127.0.0.1:5672/')
 
 
 class ExampleService(object):
@@ -45,14 +49,14 @@ class ExampleService(object):
 
 class GenericTest(TestCase):
     def setUp(self):
-        self.node = Node(exchange='isc-unittest')
+        self.node = Node(exchange='isc-unittest', url=RABBITMQ_HOST)
         self.service = ExampleService()
         self.node.register_service(self.service)
         self.node_thread = Thread(target=self.node.run)
         self.node_thread.daemon = True
         self.node_thread.start()
         self.node.wait_for_ready()
-        self.client = Client(exchange='isc-unittest')
+        self.client = Client(exchange='isc-unittest', host=RABBITMQ_HOST)
         self.client.start()
         self.clients = []
 
@@ -84,7 +88,7 @@ class GenericTest(TestCase):
 
     def test_unexisting_service(self):
         self.client.set_invoke_timeout(1)
-        self.assertRaises(TimeoutException, self.client.unexisting_service.some_method)
+        self.assertRaises(RemoteException, self.client.unexisting_service.some_method)
 
     def test_raises_exception(self):
         self.assertRaises(RemoteException, self.client.example.raise_error)
@@ -174,7 +178,7 @@ class GenericTest(TestCase):
         )
 
     def test_json_codec(self):
-        client = Client(codec=JSONCodec(), exchange='isc-unittest')
+        client = Client(codec=JSONCodec(), exchange='isc-unittest', host=RABBITMQ_HOST)
         client.start()
         self.clients.append(client)
         self.assertEqual(
@@ -199,7 +203,7 @@ class GenericTest(TestCase):
         self.assertTrue(error_event.wait(3))
 
     def test_eventhook(self):
-        client = Client(exchange='isc-unittest')
+        client = Client(exchange='isc-unittest', host=RABBITMQ_HOST)
         self.clients.append(client)
 
         event = Event()
