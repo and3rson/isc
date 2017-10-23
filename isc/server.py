@@ -6,12 +6,16 @@ try:
     from inspect import signature
 except:
     signature = None
+from distutils import StrictVersion
 from threading import Thread, Event
 from multiprocessing.pool import ThreadPool
 
 from isc import codecs, log
 
 from time import sleep
+
+
+PIKA_VERSION = StrictVersion(pika.__version__)
 
 
 class Node(object):
@@ -198,7 +202,15 @@ class Node(object):
         """
         Creates a fanout queue to accept notifications.
         """
-        channel.exchange_declare(exchange='{}_fanout'.format(self.exchange), type='fanout')
+        declare_kwargs = dict(
+            exchange='{}_fanout'.format(self.exchange)
+        )
+        if PIKA_VERSION >= StrictVersion('0.10.0'):
+            kwarg = 'exchange_type'
+        else:
+            kwarg = 'type'
+        declare_kwargs[kwarg] = 'fanout'
+        channel.exchange_declare(**declare_kwargs)
         fanout_queue = channel.queue_declare(exclusive=True)
         channel.queue_bind(exchange='{}_fanout'.format(self.exchange), queue=fanout_queue.method.queue)
 
