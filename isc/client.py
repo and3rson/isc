@@ -237,7 +237,10 @@ class ConsumerThread(Thread):
 
     def _handle_return(self, exception, exchange, routing_key, message):
         if exception.reply_code == 312:
-            exception = RemoteException('Could not find route to the destination queue. Is RPC server running?')
+            exception = RemoteException(
+                'Could not find route to the destination queue '
+                '(routing key "{}"). Is RPC server running?'.format(routing_key)
+            )
         else:
             exception = RemoteException(str(exception))
         self.on_return.fire(exception, message)

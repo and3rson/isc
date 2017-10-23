@@ -167,6 +167,7 @@ texinfo_documents = [
      'Miscellaneous'),
 ]
 
+
 class Mock(MagicMock):
     @classmethod
     def __getattr__(cls, name):
