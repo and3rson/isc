@@ -1,10 +1,10 @@
-FROM python:3.6-alpine
+FROM python:3.6-rc-alpine
 MAINTAINER Andrew Dunai
 
 # Enable edge repo
-RUN sed -i -e 's/v3\.\d/edge/g' /etc/apk/repositories
+RUN sed -i -e 's/v3\.\d/v3.6/g' /etc/apk/repositories
 
-RUN apk add --update py-gevent
+RUN apk add --update py3-gevent
 RUN mkdir /home/isc
 
 COPY ./requirements /home/isc/requirements
