@@ -6,7 +6,7 @@ try:
     from inspect import signature
 except:
     signature = None
-from distutils import StrictVersion
+from distutils.version import StrictVersion
 from threading import Thread, Event
 from multiprocessing.pool import ThreadPool
 
