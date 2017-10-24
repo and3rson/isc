@@ -23,7 +23,7 @@ class Process(Thread):
         self.proceed_evt.wait()
         for i in range(0, ITERATIONS):
             start = time()
-            self.client.example.add(random(), random())
+            self.client.example.add(random(), random(), wait=0)
             self.timediff += int((time() - start) * 1000)
 
 

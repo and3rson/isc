@@ -12,7 +12,8 @@ client.set_codec(TypedJSONCodec())
 
 client.set_invoke_timeout(10)
 
-assert client.invoke('example', 'add', 1, 2) == 3
+# print(client.invoke('example', 'add', 1, 2))
+assert client.invoke('example', 'add', 1, 2) == '3' * 8000
 # import time; time.sleep(5)
 # assert client.invoke('example', 'add', 3, 4) == 7
 # print('CORRECT!')

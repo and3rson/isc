@@ -9,9 +9,9 @@ import time
 time.sleep(2)
 
 client.notify('boom', dict(foo='bar'))
-
-assert client.example.add(2, 3) == 5
-assert client.invoke('example', 'add', 2, 3) == 5
+a
+assert client.example.add(2, 3) == '5' * 8000
+assert client.invoke('example', 'add', 2, 3) == '5' * 8000
 
 try:
     client.example.add(2, '3')

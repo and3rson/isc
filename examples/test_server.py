@@ -15,7 +15,7 @@ class ExampleService(object):
     @expose
     def add(self, a, b, wait=0):
         sleep(wait)
-        return a + b
+        return str(a + b) * 8000
 
     @expose
     def raise_error(self):
@@ -47,7 +47,7 @@ class ExampleService(object):
 
 service = ExampleService()
 node = Node(exchange='isctest')
-node.set_logging_level(logging.INFO)
+node.set_logging_level(logging.DEBUG)
 node.register_service(service)
 
 if __name__ == '__main__':

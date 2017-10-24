@@ -118,7 +118,7 @@ class GenericTest(TestCase):
         client.on_error += error_event.set
         self.assertTrue(error_event.wait(5))
 
-        client._consumer._hostname = 'amqp://127.0.0.1:5672'
+        client._consumer._hostname = RABBITMQ_HOST
 
         connect_event = Event()
         client.on_connect += connect_event.set
@@ -168,7 +168,7 @@ class GenericTest(TestCase):
     def test_slow_method(self):
         self.client.set_invoke_timeout(1)
         self.assertRaises(TimeoutException, self.client.example.slow_method)
-        self.client.set_invoke_timeout(3)
+        self.client.set_invoke_timeout(5)
         self.assertEqual(self.client.example.slow_method(), 42)
 
     def test_pickle_codec(self):
