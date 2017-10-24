@@ -18,7 +18,7 @@ setup(
         'isc.management.commands',
     ],
     include_package_data=True,
-    install_requires=['setuptools', 'pika', 'kombu', 'python-dateutil'],
+    install_requires=['setuptools', 'kombu', 'python-dateutil'],
     zip_safe=False,
     classifiers=[
         'Development Status :: 5 - Production/Stable',
