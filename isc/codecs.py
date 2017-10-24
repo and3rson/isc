@@ -90,7 +90,7 @@ class TypedJSONCodec(AbstractCodec):
         try:
             obj_type = v['__object_type']
             obj_value = v['__object_value']
-        except:
+        except Exception:
             return v
 
         if obj_type == 'datetime':

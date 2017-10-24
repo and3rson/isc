@@ -4,7 +4,7 @@ import sys
 try:
     from IPython import start_ipython
     ipython = True
-except:
+except ImportError:
     ipython = False
 
 from django.core.management import BaseCommand

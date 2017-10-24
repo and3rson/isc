@@ -4,7 +4,7 @@ from isc.client import FutureResult, RemoteException
 
 try:
     from unittest.mock import patch
-except:
+except ImportError:
     from mock import patch
 
 

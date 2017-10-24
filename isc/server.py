@@ -1,6 +1,5 @@
 from functools import partial
 # import pika
-import socket
 import kombu
 from kombu.pools import producers
 from kombu.mixins import ConsumerMixin
@@ -9,12 +8,10 @@ import sys
 import uuid
 try:
     from inspect import signature
-except:
+except ImportError:
     signature = None
-from distutils.version import StrictVersion
 from threading import Thread, Event, Lock
 from multiprocessing.pool import ThreadPool
-import traceback
 
 from isc import codecs, log
 
