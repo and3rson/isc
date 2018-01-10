@@ -6,11 +6,11 @@ services:
         environment:
             RABBITMQ_HOST: amqp://guest:guest@rabbitmq:5672
             PYTHONUNBUFFERED: 0
-        command: sh -c 'sleep 5 && make test && flake8'
+        command: sh -c 'sleep 5 && make test && flake8 && cp .coverage ./artifacts'
         links:
             - rabbitmq
         volumes:
-            - ./.coverage:/home/isc/.coverage
+            - ./artifacts:/home/isc/artifacts
     rabbitmq:
         image: rabbitmq
         logging:
