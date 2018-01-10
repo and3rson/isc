@@ -8,7 +8,7 @@ ISC stands for Inter-Service Communication. It is **the library you missed to wr
 
 It uses RabbitMQ as messaging broker and is compatible with gevent monkey patching.
 
-[![Coverage Status](https://coveralls.io/repos/github/and3rson/isc/badge.svg)](https://coveralls.io/github/and3rson/isc) [![Build Status](https://travis-ci.org/and3rson/isc.svg)](https://travis-ci.org/and3rson/isc) [![Documentation Status](https://readthedocs.org/projects/isc/badge/?version=latest)](http://isc.readthedocs.io/en/latest/?badge=latest)
+[![Coverage Status](https://coveralls.io/repos/github/and3rson/isc/badge.svg?1)](https://coveralls.io/github/and3rson/isc) [![Build Status](https://travis-ci.org/and3rson/isc.svg)](https://travis-ci.org/and3rson/isc) [![Documentation Status](https://readthedocs.org/projects/isc/badge/?version=latest)](http://isc.readthedocs.io/en/latest/?badge=latest)
 
 # Django + ISC = ♥
 
