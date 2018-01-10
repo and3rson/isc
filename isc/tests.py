@@ -6,7 +6,7 @@ from time import sleep
 from time import time
 from .server import Node, expose, on, local_timer
 from .client import Client, RemoteException, TimeoutException, FutureResult
-from .codecs import JSONCodec
+from .codecs import JSONCodec, TypedJSONCodec
 from threading import Thread, Event
 
 
@@ -214,3 +214,25 @@ class GenericTest(TestCase):
         self.assertTrue(event.wait(5))
 
         client.on_connect -= event.set
+
+    def test_typed_json_codec(self):
+        client = Client(codec=TypedJSONCodec, exchange='isc-unittest', host=RABBITMQ_HOST)
+        client.start()
+        self.clients.append(client)
+        # Python 2/3 compatible testcase
+        self.assertEqual(
+            client.example.add(b'2', b'3'), b'23',
+            'Bytes should remain bytes'
+        )
+        self.assertEqual(
+            type(client.example.add(b'2', b'3')), type(b'23'),
+            'Bytes should remain bytes'
+        )
+        self.assertEqual(
+            client.example.add(u'2', u'3'), u'23',
+            'Unicode should remain unicode'
+        )
+        self.assertEqual(
+            type(client.example.add(u'2', u'3')), type(u'23'),
+            'Unicode should remain unicode'
+        )
