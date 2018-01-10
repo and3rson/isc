@@ -16,4 +16,4 @@ six==1.10.0
 python-dateutil==2.6.1
 flake8==3.5.0
 gevent==1.2.1
-
+PyYAML==3.12
