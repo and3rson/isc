@@ -18,9 +18,6 @@ from isc import codecs, log
 from time import sleep
 
 
-# PIKA_VERSION = StrictVersion(pika.__version__)
-
-
 class Node(ConsumerMixin):
     """
     Registers services & listens to AMQP for RPC calls & notifications.
@@ -44,10 +41,6 @@ class Node(ConsumerMixin):
             self.url = 'amqp://guest:guest@{}/'.format(hostname)
         else:
             self.url = url
-        # if url is None:
-        #     self.params = pika.ConnectionParameters(hostname)
-        # else:
-        #     self.params = pika.URLParameters(url)
         self._is_running = False
         self.codecs = {}
         self.register_codec(codecs.PickleCodec())
@@ -61,13 +54,10 @@ class Node(ConsumerMixin):
         self.pool = ThreadPool(thread_pool_size)
         self.connection = kombu.Connection(self.url)
 
-        # self.consumers.append(self._create_service_queues(self.services))
-        # self.consumers.append(self._create_fanout_exchange())
-
     def run(self):
         self._register_listeners(self.services)
         self._schedule_methods(self.services)
-        super().run()
+        super(Node, self).run()
 
     def get_consumers(self, Consumer, channel):
         consumers = [
@@ -97,51 +87,6 @@ class Node(ConsumerMixin):
             exposed=exposed_dict,
             listeners=listeners_dict
         )
-
-    # def run(self):
-    #     """
-    #     Starts provider node.
-    #     Blocks until `stop` is called.
-    #     """
-    #     self._is_running = True
-    #     while self._is_running:
-    #         try:
-    #             self.conn = kombu.Connection(
-    #                 self.url,
-    #                 3
-    #             )
-    #             # self.conn.process_data_events = self._fix_pika_timeout(self.conn.process_data_events)
-    #             self.channel = self.conn.channel()
-
-    #             self._create_service_queues(self.channel, self.services)
-    #             self._register_listeners(self.services)
-    #             self._create_fanout_exchange(self.channel)
-    #             self._schedule_methods(self.services)
-
-    #             log.info('Ready')
-    #             self._is_ready.set()
-    #             # self.channel.start_consuming()
-    #             # consumer = kombu.Consumer(
-    #             #     self.conn,
-    #             #     queues=queues,
-    #             #     on_message=self._on_message
-    #             # )
-    #             # consumer.consume()
-    #             while self._is_running:
-    #                 print('Running')
-    #                 try:
-    #                     self.conn.drain_events(timeout=0.5)
-    #                 except socket.timeout:
-    #                     continue
-    #             self._is_running = False
-    #             self._is_ready.clear()
-    #         except Exception as e:  # pragma: no cover
-    #             self._is_ready.clear()
-    #             log.error('Connection closed, retrying in 3 seconds. Error was: {}'.format(str(e)))
-    #             # traceback.print_exc()
-    #             sleep(3)
-    #             continue
-    #     log.info('Node terminated')
 
     def register_service(self, service):
         """
@@ -181,16 +126,6 @@ class Node(ConsumerMixin):
         """
         self._is_running = False
         self.should_stop = True
-        # super().stop()
-        # self.conn.add_timeout(0, lambda: self.channel.stop_consuming())
-
-    # def _fix_pika_timeout(self, process_data_events):
-    #     """
-    #     Fixes pika timeout (default is 5, we want it to be 1 for faster shutdown)
-    #     """
-    #     def process_data_events_new(time_limit=0):
-    #         return process_data_events(time_limit=1)
-    #     return process_data_events_new
 
     def _run_scheduled_with_local_timer(self, fn, timeout):
         """
@@ -231,7 +166,6 @@ class Node(ConsumerMixin):
             durable=False
         )
         exchange.declare()
-        # channel.exchange_declare(exchange=self.exchange)
         queues = []
         for service in services.values():
             queue_name = '{}_service_{}'.format(self.exchange, service.name)
@@ -243,21 +177,14 @@ class Node(ConsumerMixin):
                 routing_key=queue_name,
                 exclusive=False,
                 durable=False,
-                # channel=channel
             )
             queue.declare()
             queues.append(queue)
-            # channel.queue_delete(queue=queue)
-            # channel.queue_declare(queue=queue, auto_delete=True)
-            # channel.queue_bind(queue, self.exchange)
-            # channel.basic_consume(self._on_message, queue=queue, no_ack=False)
         consumer = Consumer(
-            # self.connection,
             queues=queues,
             on_message=self._on_message,
             no_ack=False
         )
-        # consumer.consume(no_ack=False)
         return consumer
 
     def _register_listeners(self, services):
@@ -275,14 +202,6 @@ class Node(ConsumerMixin):
         """
         Creates a fanout queue to accept notifications.
         """
-        # declare_kwargs = dict(
-        #     exchange='{}_fanout'.format(self.exchange)
-        # )
-        # if PIKA_VERSION >= StrictVersion('0.10.0'):
-        #     kwarg = 'exchange_type'
-        # else:
-        #     kwarg = 'type'
-        # declare_kwargs[kwarg] = 'fanout'
         exchange_name = '{}_fanout'.format(self.exchange)
         log.debug('Declaring fanout exchange %s', exchange_name)
         exchange = kombu.Exchange(
@@ -309,12 +228,7 @@ class Node(ConsumerMixin):
             no_ack=True
             # no_ack=True
         )
-        # consumer.consume(no_ack=True)
-        # channel.exchange_declare(**declare_kwargs)
-        # fanout_queue = channel.queue_declare(exclusive=True)
-        # channel.queue_bind(exchange='{}_fanout'.format(self.exchange), queue=fanout_queue.method.queue)
 
-        # channel.basic_consume(self._on_broadcast, queue=fanout_queue.method.queue, no_ack=True)
         return consumer
 
     def _schedule_methods(self, services):
@@ -344,12 +258,8 @@ class Node(ConsumerMixin):
             if service_name not in self.services:  # pragma: no cover
                 return
 
-            # Node.channel_lock.acquire()
-            # channel.basic_ack(delivery_tag=message.details['delivery_tag'])
             message.ack()
-            # Node.channel_lock.release()
 
-            # service = self.services[service_name]
             try:
                 log.debug('Got invocation ..{}'.format(
                     str(message.properties['correlation_id'])[-4:]
