@@ -10,7 +10,7 @@ services:
         links:
             - rabbitmq
         volumes:
-            - ./.coveragerc:/home/isc/.coveragerc
+            - ./.coverage:/home/isc/.coverage
     rabbitmq:
         image: rabbitmq
         logging:

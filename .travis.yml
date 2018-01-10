@@ -27,7 +27,9 @@ before_install:
 install:
   - pip install coverage coveralls
   - docker build -f ${DOCKERFILE} -t isc-test .
-script: docker-compose up --abort-on-container-exit --exit-code-from app
+script:
+  - touch .coverage
+  - docker-compose up --abort-on-container-exit --exit-code-from app
 
 after_success:
   - coveralls
