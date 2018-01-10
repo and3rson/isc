@@ -24,7 +24,9 @@ before_install:
   - chmod +x docker-compose
   - sudo mv docker-compose /usr/local/bin
 
-install: docker build -f ${DOCKERFILE} -t isc-test .
+install:
+  - pip install coverage coveralls
+  - docker build -f ${DOCKERFILE} -t isc-test .
 script: docker-compose up --abort-on-container-exit --exit-code-from app
 
 after_success:
