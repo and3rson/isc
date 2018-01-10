@@ -25,6 +25,12 @@ before_install:
   - sudo mv docker-compose /usr/local/bin
 
 install:
+  - pip install coverage coveralls gevent pyyaml
   - docker build -f ${DOCKERFILE} -t isc-test .
+  - cp ./artifacts/.coverage .
+  - sed -i .coverage -e "s/\/home\/isc/${PWD//\//\\\/}/g"
 script:
   - docker-compose up --abort-on-container-exit --exit-code-from app
+after_success:
+  - coveralls
+
