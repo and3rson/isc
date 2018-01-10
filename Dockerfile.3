@@ -1,0 +1,17 @@
+FROM python:3.6-jessie
+MAINTAINER Andrew Dunai
+
+RUN mkdir /home/isc
+
+COPY ./requirements /home/isc/requirements
+
+WORKDIR /home/isc
+
+# Install requirements
+RUN \
+    python3.6 -m pip install -r ./requirements/test.txt
+
+COPY ./.flake8 /home/isc
+COPY ./pytest.ini /home/isc
+COPY ./isc /home/isc/isc
+

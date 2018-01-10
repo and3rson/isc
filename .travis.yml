@@ -8,13 +8,20 @@ services:
 
 language: python
 
+matrix:
+    include:
+        - python: 2.7
+          env: DOCKERFILE=Dockerfile.2
+        - python: 3.6
+          env: DOCKERFILE=Dockerfile.3
+
 before_install:
   - sudo rm /usr/local/bin/docker-compose
   - curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE_VERSION}/docker-compose-`uname -s`-`uname -m` > docker-compose
   - chmod +x docker-compose
   - sudo mv docker-compose /usr/local/bin
 
-install: docker build -t isc-test .
+install: docker build -f ${DOCKERFILE} -t isc-test .
 script: docker-compose up --abort-on-container-exit --exit-code-from app
 
 #after_success:
