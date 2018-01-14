@@ -92,7 +92,7 @@ class TypedJSONCodec(AbstractCodec):
         elif isinstance(v, UUID):
             return dict(__object_type='uuid', __object_value=v.hex)
         elif isinstance(v, binary_type):
-            return dict(__object_type='binary', __object_value=v)
+            return dict(__object_type='binary', __object_value=v.decode())
         else:
             raise CodecException('Don\'t know how to serialize {}'.format(repr(v)))
 
