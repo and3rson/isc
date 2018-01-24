@@ -2,7 +2,6 @@
 
 from isc.server import Node, expose, on, local_timer
 from time import sleep
-from pympler import tracker
 import logging
 
 

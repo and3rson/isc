@@ -87,12 +87,13 @@ class TypedJSONCodec(AbstractCodec):
         return encoder.encode(message)
 
     def _encode_object(self, v):
+        print('Encode', v)
         if isinstance(v, datetime):
             return dict(__object_type='datetime', __object_value=v.isoformat())
         elif isinstance(v, UUID):
             return dict(__object_type='uuid', __object_value=v.hex)
         elif isinstance(v, binary_type):
-            return dict(__object_type='binary', __object_value=v.decode())
+            return dict(__object_type='binary', __object_value=list(v))
         else:
             raise CodecException('Don\'t know how to serialize {}'.format(repr(v)))
 
@@ -113,7 +114,7 @@ class TypedJSONCodec(AbstractCodec):
         elif obj_type == 'uuid':
             return UUID(obj_value)
         elif obj_type == 'binary':
-            return obj_value.encode('utf-8')
+            return bytes(bytearray(obj_value))  # Python 2.x/3.x portable method
         else:
             raise CodecException('Unknown type: {}'.format(obj_type))
 

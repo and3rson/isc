@@ -216,7 +216,7 @@ class GenericTest(TestCase):
         client.on_connect -= event.set
 
     def test_typed_json_codec(self):
-        client = Client(codec=TypedJSONCodec, exchange='isc-unittest', host=RABBITMQ_HOST)
+        client = Client(codec=TypedJSONCodec(), exchange='isc-unittest', host=RABBITMQ_HOST)
         client.start()
         self.clients.append(client)
         # Python 2/3 compatible testcase
@@ -235,4 +235,9 @@ class GenericTest(TestCase):
         self.assertEqual(
             type(client.example.add(u'2', u'3')), type(u'23'),
             'Unicode should remain unicode'
+        )
+
+        self.assertEqual(
+            client.example.add(b'\xFF', b'\xFF'), b'\xFF\xFF',
+            'Unicodes should work'
         )
